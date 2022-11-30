@@ -26,30 +26,30 @@ DuiId extend_hash(u64 hash, String str)
   return hash;
 }
 
-#define INTERACTION_STATE(var)                                                  \
-  DuiId var                      = -1;                                          \
-  DuiId just_started_being_##var = -1;                                          \
-  DuiId just_stopped_being_##var = -1;                                          \
-  DuiId was_last_control_##var   = -1;                                          \
-  Vec2f start_position_##var     = {};                                          \
-                                                                                \
-  b8 is_##var(DuiId id) { return var == id || just_stopped_being_##var == id; } \
-                                                                                \
-  void set_##var(DuiId id)                                                      \
-  {                                                                             \
-    if (var != id) {                                                            \
-      just_started_being_##var = id;                                            \
-      start_position_##var     = input->mouse_pos;                              \
-    }                                                                           \
-                                                                                \
-    var = id;                                                                   \
-  }                                                                             \
-  void clear_##var(DuiId id)                                                    \
-  {                                                                             \
-    if (var == id) {                                                            \
-      var                      = 0;                                             \
-      just_stopped_being_##var = id;                                            \
-    }                                                                           \
+#define INTERACTION_STATE(var)                     \
+  DuiId var                      = -1;             \
+  DuiId just_started_being_##var = -1;             \
+  DuiId just_stopped_being_##var = -1;             \
+  b8 was_last_control_##var      = -1;             \
+  Vec2f start_position_##var     = {};             \
+                                                   \
+  b8 is_##var(DuiId id) { return var == id; }      \
+                                                   \
+  void set_##var(DuiId id)                         \
+  {                                                \
+    if (var != id) {                               \
+      just_started_being_##var = id;               \
+      start_position_##var     = input->mouse_pos; \
+    }                                              \
+                                                   \
+    var = id;                                      \
+  }                                                \
+  void clear_##var(DuiId id)                       \
+  {                                                \
+    if (var == id) {                               \
+      var                      = 0;                \
+      just_stopped_being_##var = id;               \
+    }                                              \
   }
 
 #define SUB_ID(name, id) DuiId name = extend_hash(id, #name)

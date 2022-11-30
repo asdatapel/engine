@@ -30,6 +30,14 @@ struct String {
     return data[i];
   }
 
+  String sub(u32 from, u32 to)
+  {
+    assert(from <= size);
+    assert(to <= size);
+
+    return String(data + from, to - from);
+  }
+
   u64 to_uint64()
   {
     u64 val = 0;
@@ -50,13 +58,29 @@ struct StaticString {
   StaticString() { data[0] = '\0'; }
 
   template <u64 CAPACITY_2>
+  StaticString(StaticString<CAPACITY_2> &str2)
+  {
+    size = fmin(str2.size, MAX_SIZE);
+    memcpy(data, str2.data, size);
+    data[size] = '\0';
+  }
+
+  template <u32 N>
+  StaticString(const char (&str)[N])
+  {
+    assert(N <= CAPACITY + 1);
+    memcpy(data, str, N);
+    size = N - 1;
+  }
+
+  template <u64 CAPACITY_2>
   void operator=(const StaticString<CAPACITY_2> &str2)
   {
     size = fmin(str2.size, MAX_SIZE);
     memcpy(data, str2.data, size);
     data[size] = '\0';
   }
-  
+
   void operator=(const String &str2)
   {
     size = fmin(str2.size, MAX_SIZE);
@@ -64,11 +88,50 @@ struct StaticString {
     data[size] = '\0';
   }
 
-  template <u64 CAPACITY_2>
-  StaticString(StaticString<CAPACITY_2> &str2)
+  String to_str() { return String(data, size); }
+  operator String() { return to_str(); }
+
+  u8 &operator[](u32 i)
   {
-    size = fmin(str2.size, MAX_SIZE);
-    memcpy(data, str2.data, size);
-    data[size] = '\0';
+    assert(i < size);
+    return data[i];
+  }
+
+  void shift_delete_range(u32 from, u32 to)
+  {
+    assert(from >= 0);
+    assert(from < size);
+    assert(to >= 0);
+    assert(to <= size);
+
+    size -= to - from;
+
+    while (from < size) {
+      data[from] = data[to];
+      from++;
+      to++;
+    }
+  }
+
+  void shift_delete(u32 i)
+  {
+    assert(i >= 0);
+    assert(i < size);
+
+    shift_delete_range(i, i + 1);
+  }
+
+  void push_middle(u8 value, u32 i)
+  {
+    assert(i >= 0);
+    assert(i <= size);
+
+    u32 j = size;
+    while (j > i) {
+      data[j] = data[j - 1];
+      j--;
+    }
+    data[i] = value;
+    size++;
   }
 };

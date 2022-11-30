@@ -3,7 +3,7 @@
 #include "dui/dui.hpp"
 #include "platform.hpp"
 #include "types.hpp"
-#include "vulkan.hpp"
+#include "gpu/vulkan/vulkan.hpp"
 
 struct Vert2D {
   f32 x, y;
@@ -22,7 +22,6 @@ Vertex tri[] = {
     {{-0.5, 0.5}, {0.0, 0.0, 1.f}},
 };
 
-
 Vertex tri2[] = {
     {{0.25, -0.5}, {.9, .7, .3f}},
     {{0.75, 0.5}, {0.0, 1.0, 0.0f}},
@@ -36,13 +35,27 @@ int main()
   Platform::GlfwWindow window;
   window.init();
 
-  Vulkan vulkan;
-  vulkan.init(&window);
+  init_vulkan(&window);
 
-  Vulkan::Buffer vb = vulkan.create_vertex_buffer(sizeof(tri));
-  vulkan.upload_buffer(vb, &tri, sizeof(tri));
-  Vulkan::Buffer vb2 = vulkan.create_vertex_buffer(sizeof(tri2));
-  vulkan.upload_buffer(vb2, &tri2, sizeof(tri2));
+  Pipeline pipeline = create_pipeline(vk.render_pass);
+
+  Buffer vb = create_vertex_buffer(sizeof(tri));
+  upload_buffer_staged(vb, &tri, sizeof(tri));
+  Buffer vb2 = create_vertex_buffer(sizeof(tri2));
+  upload_buffer_staged(vb2, &tri2, sizeof(tri2));
+
+  Image green_tex(256, 256, 4, &system_allocator);
+  for (i32 i = 0; i < 256 * 256; i++) {
+    green_tex.data()[i * 4 + 1] = 255;
+  }
+
+  ImageBuffer image = create_image(256, 256);
+  VkImageView image_view = create_image_view(image);
+  VkSampler sampler = create_sampler();
+
+  upload_image(image, green_tex);
+  VkDescriptorSet desc_set = create_descriptor_set(pipeline);
+  write_sampler(desc_set, image_view, sampler);
 
   Input input;
   Platform::setup_input_callbacks(&window, &input);
@@ -50,16 +63,18 @@ int main()
   while (!window.should_close()) {
     Platform::fill_input(&window, &input);
 
-    vulkan.start_frame();
+    start_frame(pipeline);
 
-    Dui::debug_ui_test(&input, &vulkan, window.get_size());
-    vulkan.draw_vertex_buffer(vb, 0, 3);
-    vulkan.draw_vertex_buffer(vb2, 0, 3);
-  
-    vulkan.end_frame();
+    // draw_vertex_buffer(vb, 0, 3);
+    // draw_vertex_buffer(vb2, 0, 3);
+    Dui::debug_ui_test(&input, pipeline, window.get_size());
+
+    end_frame();
   }
 
-  vulkan.destroy();
+  destroy_pipeline(pipeline);
+
+  destroy_vulkan();
   window.destroy();
 
   return 0;

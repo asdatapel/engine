@@ -95,3 +95,4 @@ struct Input {
   Vec2f mouse_pos_prev  = {};
   Vec2f mouse_pos_delta = {};
 };
+

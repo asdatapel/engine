@@ -46,7 +46,7 @@ void Container::start_frame(DuiState *s, Input *input, i64 current_frame)
 Container *get_current_container(DuiState *s)
 {
   Container *cc = s->cc;
-  if (cc->parent->windows[cc->parent->active_window_idx] != cc->id)
+  if (!cc || cc->parent->windows[cc->parent->active_window_idx] != cc->id)
     return nullptr;
 
   return cc;

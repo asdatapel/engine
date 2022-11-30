@@ -8,7 +8,7 @@ template <typename T>
 struct Vec2 {
   T x, y;
 
-  Vec2(){}
+  Vec2() {}
   Vec2(T x, T y)
   {
     this->x = x;
@@ -194,4 +194,5 @@ Vec3<T> max(Vec3<T> a, Vec3<T> b)
 
 typedef Vec2<i32> Vec2i;
 typedef Vec2<f32> Vec2f;
+typedef Vec2<b8> Vec2b;
 typedef Vec3<f32> Vec3f;

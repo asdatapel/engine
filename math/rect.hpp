@@ -27,6 +27,7 @@ struct Rect {
 
   Vec2f xy() { return {x, y}; }
   Vec2f span() { return {width, height}; }
+  Vec2f center() { return {x + (width / 2), y + (height / 2)}; }
 
   static Rect from_ends(Vec2f a, Vec2f b)
   {
@@ -37,10 +38,14 @@ struct Rect {
 
 inline bool operator==(const Rect &lhs, const Rect &rhs)
 {
-  return lhs.x == rhs.x && lhs.y == rhs.y && lhs.width == rhs.width && lhs.height == rhs.height;
+  return lhs.x == rhs.x && lhs.y == rhs.y && lhs.width == rhs.width &&
+         lhs.height == rhs.height;
 }
 
-inline bool operator!=(const Rect &lhs, const Rect &rhs) { return !(lhs == rhs); }
+inline bool operator!=(const Rect &lhs, const Rect &rhs)
+{
+  return !(lhs == rhs);
+}
 
 bool in_rect(Vec2f point, Rect rect, Rect mask = {})
 {
@@ -48,8 +53,9 @@ bool in_rect(Vec2f point, Rect rect, Rect mask = {})
     mask = rect;
   }
 
-  return point.x > rect.x && point.x < rect.x + rect.width && point.y > rect.y &&
-         point.y < rect.y + rect.height && point.x > mask.x && point.x < mask.x + mask.width &&
+  return point.x > rect.x && point.x < rect.x + rect.width &&
+         point.y > rect.y && point.y < rect.y + rect.height &&
+         point.x > mask.x && point.x < mask.x + mask.width &&
          point.y > mask.y && point.y < mask.y + mask.height;
 }
 

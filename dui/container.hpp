@@ -77,7 +77,7 @@ struct Container {
     }
 
     if (commit) {
-      cursor_size = fmaxf(cursor_size, size.y);
+      cursor_size = fmaxf(cursor_size, size.y + LINE_GAP);
       cursor.x += size.x;
 
       current_frame_minimum_content_span.x =
