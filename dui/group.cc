@@ -13,6 +13,7 @@ Rect Group::get_titlebar_full_rect()
 
   return titlebar_rect;
 }
+
 Rect Group::get_titlebar_margin_rect()
 {
   Rect titlebar_full_rect = get_titlebar_full_rect();
@@ -20,6 +21,7 @@ Rect Group::get_titlebar_margin_rect()
 
   return titlebar_full_rect;
 }
+
 Rect Group::get_titlebar_bottom_border_rect()
 {
   Rect titlebar_full_rect = get_titlebar_full_rect();
@@ -32,11 +34,13 @@ Rect Group::get_titlebar_bottom_border_rect()
   rect.height = TITLEBAR_BOTTOM_BORDER_HEIGHT;
   return rect;
 }
+
 Rect Group::get_titlebar_content_rect()
 {
   return inset(get_titlebar_margin_rect(), WINDOW_MARGIN_SIZE);
 }
-Rect Group::get_tab_margin_rect(i32 window_idx)
+
+Rect Group::get_tabs_rect()
 {
   Rect titlebar_content_rect = get_titlebar_content_rect();
 
@@ -47,26 +51,79 @@ Rect Group::get_tab_margin_rect(i32 window_idx)
   tabs_rect.width  = titlebar_content_rect.width - (WINDOW_CONTROL_WIDTH * 2);
   tabs_rect.height = titlebar_content_rect.height + WINDOW_MARGIN_SIZE;
 
-  const f32 UNSELECTED_TAB_WIDTH = 128.f;
-  const f32 TAB_GAP              = 2.f;
-
-  Container *window = get_container(windows[window_idx]);
-  f32 tab_width     = fmaxf(UNSELECTED_TAB_WIDTH,
-                            get_text_width(font, window->title) + TAB_MARGIN * 2);
-  if (UNSELECTED_TAB_WIDTH * windows.size > tabs_rect.width) {
-    tab_width -= ((UNSELECTED_TAB_WIDTH * windows.size) - tabs_rect.width) /
-                 windows.size;
+  return tabs_rect;
+}
+f32 Group::get_combined_extra_desired_tab_space()
+{
+  f32 base_tab_width = get_base_tab_width();
+  f32 total          = 0.f;
+  for (i32 i = 0; i < windows.size; i++) {
+    total += fmaxf(get_desired_tab_width(i) - base_tab_width, 0);
   }
-  tab_width = fmaxf(tab_width, 0.f);
+  return total;
+}
+f32 Group::get_available_extra_tab_space()
+{
+  Rect tabs_rect          = get_tabs_rect();
+  f32 combined_tab_gap    = (windows.size - 1) * TAB_GAP;
+  f32 available_tab_space = tabs_rect.width - combined_tab_gap;
+
+  f32 base_tab_width = get_base_tab_width();
+
+  return available_tab_space - (base_tab_width * windows.size);
+}
+f32 Group::get_base_tab_width()
+{
+  Rect tabs_rect       = get_tabs_rect();
+  f32 combined_tab_gap = (windows.size - 1) * TAB_GAP;
+  return fminf((tabs_rect.width - combined_tab_gap) / windows.size,
+               DEFAULT_TAB_WIDTH);
+}
+
+f32 Group::get_desired_tab_width(i32 window_idx)
+{
+  Container *window = get_container(windows[window_idx]);
+  return get_text_width(font, window->title) + TAB_MARGIN * 2;
+}
+
+Vec2f Group::get_tab_margin_span(i32 window_idx,
+                                 f32 combined_extra_desired_tab_space,
+                                 f32 available_extra_tab_space)
+{
+  Rect tabs_rect = get_tabs_rect();
+
+  f32 base_width    = get_base_tab_width();
+  f32 desired_width = get_desired_tab_width(window_idx);
+
+  f32 extra_desired_tab_space = fmax(desired_width - base_width, 0);
+  f32 extra_tab_space_share_pct =
+      extra_desired_tab_space / combined_extra_desired_tab_space;
+  f32 extra_width = fminf(extra_tab_space_share_pct * available_extra_tab_space,
+                          extra_desired_tab_space);
+
+  f32 width = base_width + extra_width;
+
+  return {width, tabs_rect.height};
+}
+
+Rect Group::get_tab_margin_rect(i32 window_idx)
+{
+  f32 combined_extra_desired_tab_space = get_combined_extra_desired_tab_space();
+  f32 available_extra_tab_space        = get_available_extra_tab_space();
 
   Rect rect;
-  rect.x      = tabs_rect.x + (tab_width + TAB_GAP) * window_idx;
-  rect.y      = tabs_rect.y;
-  rect.width  = tab_width;
-  rect.height = tabs_rect.height;
+  Vec2f tab_pos = get_tabs_rect().xy();
+  for (i32 w_i = 0; w_i <= window_idx; w_i++) {
+    Vec2f tab_span = get_tab_margin_span(w_i, combined_extra_desired_tab_space,
+                                         available_extra_tab_space);
+
+    rect = {tab_pos.x, tab_pos.y, tab_span.x, tab_span.y};
+    tab_pos.x += rect.width + TAB_GAP;
+  }
 
   return rect;
 }
+
 i32 Group::get_tab_at_pos(Vec2f pos)
 {
   for (i32 i = 0; i < windows.size; i++) {

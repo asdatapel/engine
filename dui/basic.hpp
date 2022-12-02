@@ -3,7 +3,8 @@
 #include "string.hpp"
 #include "types.hpp"
 
-typedef i64 DuiId;
+typedef u64 DuiId;
+
 namespace Dui
 {
 // http://www.cse.yorku.ca/~oz/hash.html

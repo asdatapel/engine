@@ -28,7 +28,7 @@ struct GlfwWindow {
   {
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-    ref = glfwCreateWindow(800, 600, "DUI Demo", nullptr, nullptr);
+    ref = glfwCreateWindow(1920, 1080, "DUI Demo", nullptr, nullptr);
   }
 
   VulkanExtensions get_vulkan_extensions()

@@ -409,7 +409,7 @@ b8 snap_group(Group *g, Group *target, i32 axis, b8 dir,
     Group *new_g             = create_group(target, target->rect);
     new_g->windows           = target->windows;
     new_g->active_window_idx = target->active_window_idx;
-    if (s.empty_group == target) s.empty_group = new_g;
+    if (target == s.empty_group) s.empty_group = new_g;
 
     target->windows.clear();
     target->split_axis = axis;
@@ -434,7 +434,7 @@ b8 snap_group(Group *g, Group *target, i32 axis, b8 dir,
     for (i32 i = 0; i < new_g->splits.size; i++) {
       Group *target = new_g->splits[i].child;
     }
-    if (s.empty_group == target) s.empty_group = new_g;
+    if (target == s.empty_group) s.empty_group = new_g;
 
     target->splits.clear();
 
@@ -686,35 +686,37 @@ Group *handle_dragging_group(Group *g, DuiId id)
       return g;
     }
 
+    // if (target_group == s.fullscreen_group &&
+    //     s.fullscreen_group == s.empty_group &&
+    //     in_rect(s.input->mouse_pos, target_group->get_titlebar_full_rect()))
+    //     {
+    //   push_rect(&forground_dl, window_rect, {1, 1, 1, .5});  // preview
+    //   if (s.just_stopped_being_dragging == id) {
+    //     Group *first_leaf_node = g;
+    //     while (!first_leaf_node->is_leaf()) {
+    //       first_leaf_node = first_leaf_node->splits[0].child;
+    //     }
+    //     s.empty_group = first_leaf_node;
+
+    //     free_group(s.fullscreen_group);
+    //     s.fullscreen_group = g;
+
+    //     // move new fullscreen group to the back
+    //     i32 fullscreen_group_z = get_group_z(g);
+    //     s.root_groups.shift_delete(fullscreen_group_z);
+    //     s.root_groups.push_back(g);
+
+    //     return g;
+    //   }
+    // }
+
     if (g->is_leaf() &&
         in_rect(s.input->mouse_pos, target_group->get_titlebar_full_rect())) {
       push_rect(&forground_dl, window_rect, {1, 1, 1, .5});  // preview
       if (s.just_stopped_being_dragging == id) {
         combine_leaf_groups(target_group, g);
+
         return target_group;
-      }
-    }
-
-    if (target_group == s.fullscreen_group &&
-        s.fullscreen_group == s.empty_group &&
-        in_rect(s.input->mouse_pos, target_group->get_titlebar_full_rect())) {
-      push_rect(&forground_dl, window_rect, {1, 1, 1, .5});  // preview
-      if (s.just_stopped_being_dragging == id) {
-        Group *first_leaf_node = g;
-        while (!first_leaf_node->is_leaf()) {
-          first_leaf_node = first_leaf_node->splits[0].child;
-        }
-        s.empty_group = first_leaf_node;
-
-        free_group(s.fullscreen_group);
-        s.fullscreen_group = g;
-
-        // move new fullscreen group to the back
-        i32 fullscreen_group_z = get_group_z(g);
-        s.root_groups.shift_delete(fullscreen_group_z);
-        s.root_groups.push_back(g);
-
-        return g;
       }
     }
   }
@@ -753,13 +755,19 @@ void draw_group_and_children(Group *g)
     push_rect(g->root->dl, titlebar_rect, {1, 0, 0, 1});
   }
 
-  Rect titlebar_content_rect = g->get_titlebar_content_rect();
-
+  f32 combined_extra_desired_tab_space =
+      g->get_combined_extra_desired_tab_space();
+  f32 available_extra_tab_space = g->get_available_extra_tab_space();
+  Vec2f tab_pos                 = g->get_tabs_rect().xy();
   for (i32 w_i = 0; w_i < g->windows.size; w_i++) {
     DuiId window_id = g->windows[w_i];
     Container *w    = get_container(window_id);
 
-    Rect tab_rect = g->get_tab_margin_rect(g->get_window_idx(window_id));
+    Vec2f tab_span = g->get_tab_margin_span(
+        w_i, combined_extra_desired_tab_space, available_extra_tab_space);
+
+    Rect tab_rect = {tab_pos.x, tab_pos.y, tab_span.x, tab_span.y};
+    tab_pos.x += tab_rect.width + TAB_GAP;
 
     Color tab_color = d_dark;
     if (w_i == g->active_window_idx) {
@@ -782,8 +790,7 @@ void start_frame_for_leaf(Group *g)
     DuiId window_id = g->windows[w_i];
     Container *w    = get_container(window_id);
 
-    i32 window_idx = g->get_window_idx(window_id);
-    Rect tab_rect  = g->get_tab_margin_rect(window_idx);
+    Rect tab_rect = g->get_tab_margin_rect(w_i);
 
     SUB_ID(tab_handle_id, window_id);
     DuiId tab_handle_hot      = do_hot(tab_handle_id, tab_rect, g->root);
@@ -801,7 +808,7 @@ void start_frame_for_leaf(Group *g)
       } else {
         i32 target_tab_idx = g->get_tab_at_pos(s.input->mouse_pos);
         DuiId tmp          = g->windows[target_tab_idx];
-        g->windows.shift_delete(window_idx);
+        g->windows.shift_delete(w_i);
         g->windows.insert(target_tab_idx, w->id);
         g->active_window_idx = target_tab_idx;
       }
@@ -832,6 +839,13 @@ void start_frame_for_group(Group *g)
   const f32 RESIZE_HANDLES_OVERSIZE = 2.f;
 
   s.cg = g;
+
+  if (s.fullscreen_group == g) {
+    g->rect.x      = 0;
+    g->rect.y      = 0;
+    g->rect.width  = s.canvas_span.x;
+    g->rect.height = s.canvas_span.y;
+  }
 
   if (!g->parent) {
     // only do movement/resizing logic if window is not fullscreen
@@ -1208,14 +1222,6 @@ void start_frame_for_group(Group *g)
   for (i32 i = 0; i < g->splits.size; i++) {
     start_frame_for_group(g->splits[i].child);
   }
-
-  // after handling children, honor any contraints here
-  if (s.fullscreen_group == g) {
-    g->rect.x      = 0;
-    g->rect.y      = 0;
-    g->rect.width  = s.canvas_span.x;
-    g->rect.height = s.canvas_span.y;
-  }
 }
 
 void start_frame(Input *input, Vec2f canvas_size)
@@ -1253,7 +1259,7 @@ void start_frame(Input *input, Vec2f canvas_size)
   if (s.input->mouse_button_down_events[(i32)MouseButton::LEFT]) {
     if (top_root_group_at_mouse_pos_z > -1) {
       Group *g = s.root_groups[top_root_group_at_mouse_pos_z];
-      if (s.fullscreen_group != g) {
+      if (g != s.fullscreen_group) {
         s.root_groups.shift_delete(top_root_group_at_mouse_pos_z);
         s.root_groups.insert(0, g);
       }
@@ -1529,7 +1535,7 @@ void text_input(StaticString<N> *str)
     if (s.input->key_down_events[(i32)Keys::RIGHT]) {
       cursor_idx++;
       if (s.input->keys[(i32)Keys::LCTRL]) {
-        while (cursor_idx <str->size && !std::isspace((*str)[cursor_idx])) {
+        while (cursor_idx < str->size && !std::isspace((*str)[cursor_idx])) {
           cursor_idx++;
         }
       }
@@ -1664,7 +1670,7 @@ void debug_ui_test(Input *input, Pipeline pipeline, Vec2f canvas_size)
   set_window_color({0, 0.13725, 0.27843, 1});
   end_window();
 
-  DuiId w2 = start_window("second", {200, 300, 100, 300});
+  DuiId w2 = start_window("A really long window title", {200, 300, 100, 300});
   set_window_color({0, 0.2, 0.4, .5});
   end_window();
 

@@ -16,6 +16,9 @@ const f32 DOCK_CONTROLS_WIDTH           = 100.f;
 const f32 LINE_GAP                      = 5.f;
 const f32 CONTENT_FONT_HEIGHT           = 21.f;
 
+const f32 DEFAULT_TAB_WIDTH = 64.f;
+const f32 TAB_GAP           = 4.f;
+
 namespace Dui
 {
 struct Group;
@@ -51,8 +54,19 @@ struct Group {
   Rect get_titlebar_margin_rect();
   Rect get_titlebar_bottom_border_rect();
   Rect get_titlebar_content_rect();
-  Rect get_tab_margin_rect(i32 window_idx);
+
+  Rect get_tabs_rect();
+
+  f32 get_combined_extra_desired_tab_space();
+  f32 get_available_extra_tab_space();
+  f32 get_base_tab_width();
+  f32 get_desired_tab_width(i32 window_idx);
+  Vec2f get_tab_margin_span(i32 window_idx,
+                            f32 combined_desired_extra_tab_space,
+                            f32 extra_tab_space);
+  Rect get_tab_margin_rect(i32 window_idx);  // inefficient
   i32 get_tab_at_pos(Vec2f pos);
+
   Rect get_border_rect();
   Rect get_window_rect();
   i32 get_window_idx(DuiId window_id);

@@ -2,7 +2,7 @@
 
 #include "types.hpp"
 
-template <typename T, i64 CAPACITY>
+template <typename T, u64 CAPACITY>
 struct StaticPool {
   struct Element {
     bool assigned;
@@ -17,7 +17,7 @@ struct StaticPool {
     }
   };
 
-  const static i64 SIZE = CAPACITY;
+  const static u64 SIZE = CAPACITY;
   Element elements[SIZE];
   Element *next = nullptr, *last = nullptr;
 
@@ -26,22 +26,22 @@ struct StaticPool {
     next = elements;
     last = next;
 
-    for (i64 i = 0; i < SIZE; i++) {
+    for (u64 i = 0; i < SIZE; i++) {
       remove(i);
     }
   }
 
-  bool exists(i64 i) { return elements[i].assigned; }
+  bool exists(u64 i) { return elements[i].assigned; }
 
-  bool wrapped_exists(i64 i) { return elements[i % SIZE].assigned; }
+  bool wrapped_exists(u64 i) { return elements[i % SIZE].assigned; }
 
-  T &operator[](i64 i)
+  T &operator[](u64 i)
   {
     assert(i < SIZE);
     return elements[i].value;
   }
 
-  T &wrapped_get(i64 i) { return elements[i % SIZE].value; }
+  T &wrapped_get(u64 i) { return elements[i % SIZE].value; }
 
   T *push_back(T value)
   {
@@ -54,7 +54,7 @@ struct StaticPool {
     return &current->value;
   }
 
-  T *emplace(T value, i64 index)
+  T *emplace(T value, u64 index)
   {
     if (next == &elements[index]) {
       next = elements[index].next;
@@ -65,7 +65,7 @@ struct StaticPool {
     return &elements[index].value;
   }
 
-  T *emplace_wrapped(i64 index, T value) { return emplace(value, index % SIZE); }
+  T *emplace_wrapped(u64 index, T value) { return emplace(value, index % SIZE); }
 
   void remove(Element *elem)
   {
@@ -75,7 +75,7 @@ struct StaticPool {
     last           = elem;
   }
 
-  void remove(i64 i)
+  void remove(u64 i)
   {
     Element *elem  = &elements[i];
     elem->assigned = false;
@@ -84,5 +84,5 @@ struct StaticPool {
     last           = elem;
   }
 
-  i64 index_of(T *ptr) { return ((Element *)ptr - elements); }
+  u64 index_of(T *ptr) { return ((Element *)ptr - elements); }
 };
