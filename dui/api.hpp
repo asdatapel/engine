@@ -14,12 +14,15 @@
 #include "string.hpp"
 #include "types.hpp"
 
-Color d_dark  = {0, 0.13725, 0.27843, 1};
-Color d       = {0, 0.2, 0.4, 1};
-Color d_light = {0, 0.24706, 0.4902, 1};
-Color l_light = {1, 0.55686, 0, 1};
-Color l       = {0.99216, 0.46667, 0.00784, 1};
-Color l_dark  = {1, 0.31373, 0.01176, 1};
+// https://www.color-hex.com/color-palette/1294
+Color highlight   = Color::from_int(0xF98125);
+
+Color d_dark  = Color::from_int(0x011f4b);  //{0, 0.13725, 0.27843, 1};
+Color d       = Color::from_int(0x03396c);  //{0, 0.2, 0.4, 1};
+Color d_light = Color::from_int(0x005b96);  //{0, 0.24706, 0.4902, 1};
+Color l_light = Color::from_int(0x19578a);  // {1, 0.55686, 0, 1};
+Color l       = Color::from_int(0x2F70AF);  //{0.99216, 0.46667, 0.00784, 1};
+Color l_dark  = Color::from_int(0x003e71);  //{1, 0.31373, 0.01176, 1};
 
 namespace Dui
 {
@@ -1594,7 +1597,7 @@ void text_input(StaticString<N> *str)
   if (selected) color = darken(color, .05f);
 
   push_rect(c->parent->root->dl, border_rect, color);
-  push_rect(c->parent->root->dl, rect, darken(color, .2f));
+  push_rect(c->parent->root->dl, rect, l_dark);
 
   c->parent->root->dl->push_scissor(rect);
 
@@ -1602,7 +1605,7 @@ void text_input(StaticString<N> *str)
     Rect highlight_rect = {fminf(highlight_start_pos, cursor_pos), rect.y + 3,
                            fabsf(cursor_pos - highlight_start_pos),
                            rect.height - 6};
-    push_rect(c->parent->root->dl, highlight_rect, {.01f, .01f, .7f, 1.f});
+    push_rect(c->parent->root->dl, highlight_rect, highlight);
   }
 
   push_text_centered(c->parent->root->dl, str->to_str(),

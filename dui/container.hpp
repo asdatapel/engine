@@ -13,14 +13,14 @@ struct Container {
 
   Group *parent = nullptr;
 
-  Vec2f scroll_offset_target = {};
-  Vec2f scroll_offset        = {};
+  Vec2f scroll_offset_target = {0, 0};
+  Vec2f scroll_offset        = {0 ,0};
 
   Rect rect;
   Color color;
 
   Rect content_rect;
-  Vec2f cursor;
+  Vec2f cursor = {0, 0};
   f32 cursor_size;
 
   // used to prevent start_frame from being called multiple times for the same
@@ -29,10 +29,10 @@ struct Container {
   i64 last_frame         = -1;
   // total space requested by content last frame. this is whats used to
   // determine free space and stretch controls to bounds.
-  Vec2f last_frame_minimum_content_span;
-  Vec2f current_frame_minimum_content_span;
-  f32 debug_last_frame_height = 0;
-  f32 debug_last_frame_width  = 0;
+  Vec2f last_frame_minimum_content_span     = {0, 0};
+  Vec2f current_frame_minimum_content_span = {0, 0};
+  f32 debug_last_frame_height              = 0;
+  f32 debug_last_frame_width               = 0;
 
   Rect get_content_rect()
   {

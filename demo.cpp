@@ -1,6 +1,6 @@
 #include <iostream>
 
-#include "dui/dui.hpp"
+#include "dui/api.hpp"
 #include "platform.hpp"
 #include "types.hpp"
 #include "gpu/vulkan/vulkan.hpp"

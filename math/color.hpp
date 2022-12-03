@@ -4,6 +4,11 @@
 
 struct Color {
   f32 r, g, b, a;
+
+  static Color from_int(i32 i)
+  {
+    return {(u8)(i >> 16) / 255.f, (u8)(i >> 8) / 255.f, (u8)i / 255.f, 1};
+  }
 };
 
 // http://marcocorvi.altervista.org/games/imgpr/rgb-hsl.htm
@@ -14,10 +19,10 @@ Color rgb_to_hsl(Color in)
   // Find min and max values of R, B, G, say Xmin and Xmax
   f32 max = fmaxf(in.r, fmaxf(in.g, in.b));
   f32 min = fminf(in.r, fminf(in.g, in.b));
-  l         = (max + min) / 2;
+  l       = (max + min) / 2;
 
-  // If Xmax and Xmin are equal, S is defined to be 0, and H is undefined but in programs usually
-  // written as 0
+  // If Xmax and Xmin are equal, S is defined to be 0, and H is undefined but in
+  // programs usually written as 0
   if (max == min) {
     s = 0;
     h = 0;
@@ -55,11 +60,13 @@ Color rgb_to_hsl(Color in)
   if (h < 0) {
     h = h + 6;
   }
-  // Notice that H ranges from 0 to 6. RGB space is a cube, and HSL space is a double hexacone,
-  // where L is the principal diagonal of the RGB cube. Thus corners of the RGB cube; red, yellow,
-  // green, cyan, blue, and magenta, become the vertices of the HSL hexagon. Then the value 0-6 for
-  // H tells you which section of the hexgon you are in. H is most commonly given as in degrees, so
-  // to convert H = H*60.0 (If H is negative, add 360 to complete the conversion.)
+  // Notice that H ranges from 0 to 6. RGB space is a cube, and HSL space is a
+  // double hexacone, where L is the principal diagonal of the RGB cube. Thus
+  // corners of the RGB cube; red, yellow, green, cyan, blue, and magenta,
+  // become the vertices of the HSL hexagon. Then the value 0-6 for H tells you
+  // which section of the hexgon you are in. H is most commonly given as in
+  // degrees, so to convert H = H*60.0 (If H is negative, add 360 to complete
+  // the conversion.)
   h = h * 60.f;
 
   return {h, s, l, in.a};
@@ -85,9 +92,9 @@ Color hsl_to_rgb(Color in)
 
     f32 q = l < 0.5f ? l * (1 + s) : l + s - l * s;
     f32 p = 2 * l - q;
-    out.r   = hue2rgb(p, q, h + 1 / 3.f);
-    out.g   = hue2rgb(p, q, h);
-    out.b   = hue2rgb(p, q, h - 1 / 3.f);
+    out.r = hue2rgb(p, q, h + 1 / 3.f);
+    out.g = hue2rgb(p, q, h);
+    out.b = hue2rgb(p, q, h - 1 / 3.f);
   }
 
   return out;
