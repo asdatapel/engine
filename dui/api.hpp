@@ -11,11 +11,12 @@
 #include "input.hpp"
 #include "logging.hpp"
 #include "math/math.hpp"
+#include "plugin.hpp"
 #include "string.hpp"
 #include "types.hpp"
 
 // https://www.color-hex.com/color-palette/1294
-Color highlight   = Color::from_int(0xF98125);
+Color highlight = Color::from_int(0xF98125);
 
 Color d_dark  = Color::from_int(0x011f4b);  //{0, 0.13725, 0.27843, 1};
 Color d       = Color::from_int(0x03396c);  //{0, 0.2, 0.4, 1};
@@ -590,9 +591,9 @@ Group *handle_dragging_group(Group *g, DuiId id)
                             b8 dir) -> b8 {
     DuiId hot = do_hot(control_id, rect);
     if (hot)
-      push_rect(&forground_dl, rect, l_dark);
+      push_rect(&s.forground_dl, rect, l_dark);
     else
-      push_rect(&forground_dl, rect, l);
+      push_rect(&s.forground_dl, rect, l);
 
     if (hot) {
       Rect preview_rect = target_group->rect;
@@ -604,7 +605,7 @@ Group *handle_dragging_group(Group *g, DuiId id)
         if (dir) preview_rect.x += preview_rect.width;
       }
 
-      push_rect(&forground_dl, preview_rect, {1, 1, 1, .5});  // preview
+      push_rect(&s.forground_dl, preview_rect, {1, 1, 1, .5});  // preview
       if (s.just_stopped_being_dragging == dragging_id) {
         snap_group(g, target_group, axis, dir);
         return true;
@@ -693,7 +694,7 @@ Group *handle_dragging_group(Group *g, DuiId id)
     //     s.fullscreen_group == s.empty_group &&
     //     in_rect(s.input->mouse_pos, target_group->get_titlebar_full_rect()))
     //     {
-    //   push_rect(&forground_dl, window_rect, {1, 1, 1, .5});  // preview
+    //   push_rect(&s.forground_dl, window_rect, {1, 1, 1, .5});  // preview
     //   if (s.just_stopped_being_dragging == id) {
     //     Group *first_leaf_node = g;
     //     while (!first_leaf_node->is_leaf()) {
@@ -715,7 +716,7 @@ Group *handle_dragging_group(Group *g, DuiId id)
 
     if (g->is_leaf() &&
         in_rect(s.input->mouse_pos, target_group->get_titlebar_full_rect())) {
-      push_rect(&forground_dl, window_rect, {1, 1, 1, .5});  // preview
+      push_rect(&s.forground_dl, window_rect, {1, 1, 1, .5});  // preview
       if (s.just_stopped_being_dragging == id) {
         combine_leaf_groups(target_group, g);
 
@@ -778,7 +779,7 @@ void draw_group_and_children(Group *g)
     }
     push_rect(g->root->dl, tab_rect, tab_color);
 
-    push_text(g->root->dl, w->title,
+    push_text(g->root->dl, &s.font, w->title,
               tab_rect.xy() + Vec2f{TAB_MARGIN, tab_rect.height - TAB_MARGIN},
               {1, 1, 1, 1}, tab_rect.height - 4);
   }
@@ -886,7 +887,7 @@ void start_frame_for_group(Group *g)
         DuiId left_top_handle_active   = do_active(left_top_handle_id);
         DuiId left_top_handle_dragging = do_dragging(left_top_handle_id);
         if (left_top_handle_hot || left_top_handle_dragging) {
-          push_rect(&forground_dl, left_top_handle_rect, {1, 1, 1, 1});
+          push_rect(&s.forground_dl, left_top_handle_rect, {1, 1, 1, 1});
         }
         if (left_top_handle_dragging) {
           g->rect.x += s.dragging_frame_delta.x;
@@ -919,7 +920,7 @@ void start_frame_for_group(Group *g)
         DuiId right_top_handle_active   = do_active(right_top_handle_id);
         DuiId right_top_handle_dragging = do_dragging(right_top_handle_id);
         if (right_top_handle_hot || right_top_handle_dragging) {
-          push_rect(&forground_dl, right_top_handle_rect, {1, 1, 1, 1});
+          push_rect(&s.forground_dl, right_top_handle_rect, {1, 1, 1, 1});
         }
         if (right_top_handle_dragging) {
           g->rect.width += s.dragging_frame_delta.x;
@@ -949,7 +950,7 @@ void start_frame_for_group(Group *g)
         DuiId left_bottom_handle_active   = do_active(left_bottom_handle_id);
         DuiId left_bottom_handle_dragging = do_dragging(left_bottom_handle_id);
         if (left_bottom_handle_hot || left_bottom_handle_dragging) {
-          push_rect(&forground_dl, left_bottom_handle_rect, {1, 1, 1, 1});
+          push_rect(&s.forground_dl, left_bottom_handle_rect, {1, 1, 1, 1});
         }
         if (left_bottom_handle_dragging) {
           g->rect.x += s.dragging_frame_delta.x;
@@ -981,7 +982,7 @@ void start_frame_for_group(Group *g)
         DuiId right_bottom_handle_dragging =
             do_dragging(right_bottom_handle_id);
         if (right_bottom_handle_hot || right_bottom_handle_dragging) {
-          push_rect(&forground_dl, right_bottom_handle_rect, {1, 1, 1, 1});
+          push_rect(&s.forground_dl, right_bottom_handle_rect, {1, 1, 1, 1});
         }
         if (right_bottom_handle_dragging) {
           g->rect.width += s.dragging_frame_delta.x;
@@ -1006,7 +1007,7 @@ void start_frame_for_group(Group *g)
         DuiId left_handle_active   = do_active(left_handle_id);
         DuiId left_handle_dragging = do_dragging(left_handle_id);
         if (left_handle_hot || left_handle_dragging) {
-          push_rect(&forground_dl, left_handle_rect, {1, 1, 1, 1});
+          push_rect(&s.forground_dl, left_handle_rect, {1, 1, 1, 1});
         }
         if (left_handle_dragging) {
           g->rect.x += s.dragging_frame_delta.x;
@@ -1030,7 +1031,7 @@ void start_frame_for_group(Group *g)
         DuiId right_handle_active   = do_active(right_handle_id);
         DuiId right_handle_dragging = do_dragging(right_handle_id);
         if (right_handle_hot || right_handle_dragging) {
-          push_rect(&forground_dl, right_handle_rect, {1, 1, 1, 1});
+          push_rect(&s.forground_dl, right_handle_rect, {1, 1, 1, 1});
         }
         if (right_handle_dragging) {
           g->rect.width += s.dragging_frame_delta.x;
@@ -1050,7 +1051,7 @@ void start_frame_for_group(Group *g)
         DuiId top_handle_active   = do_active(top_handle_id);
         DuiId top_handle_dragging = do_dragging(top_handle_id);
         if (top_handle_hot || top_handle_dragging) {
-          push_rect(&forground_dl, top_handle_rect, {1, 1, 1, 1});
+          push_rect(&s.forground_dl, top_handle_rect, {1, 1, 1, 1});
         }
         if (top_handle_dragging) {
           g->rect.y += s.dragging_frame_delta.y;
@@ -1074,7 +1075,7 @@ void start_frame_for_group(Group *g)
         DuiId bottom_handle_active   = do_active(bottom_handle_id);
         DuiId bottom_handle_dragging = do_dragging(bottom_handle_id);
         if (bottom_handle_hot || bottom_handle_dragging) {
-          push_rect(&forground_dl, bottom_handle_rect, {1, 1, 1, 1});
+          push_rect(&s.forground_dl, bottom_handle_rect, {1, 1, 1, 1});
         }
         if (bottom_handle_dragging) {
           g->rect.height += s.dragging_frame_delta.y;
@@ -1243,8 +1244,8 @@ void start_frame(Input *input, Vec2f canvas_size)
   s.just_started_being_selected = -1;
   s.just_stopped_being_selected = -1;
 
-  clear_draw_list(&forground_dl);
-  clear_draw_list(&main_dl);
+  clear_draw_list(&s.forground_dl);
+  clear_draw_list(&s.main_dl);
   for (i32 i = 0; i < s.draw_lists.size; i++) {
     clear_draw_list(&s.draw_lists[i]);
   }
@@ -1440,8 +1441,8 @@ b8 basic_test_control(String text, Vec2f size, Color color, b8 fill = false)
   push_rect(c->parent->root->dl, rect, color);
   push_rect(c->parent->root->dl, inset(rect, 3.f), darken(color, .2f));
 
-  push_text_centered(c->parent->root->dl, text, rect.center(), {true, true},
-                     {1, 1, 1, 1}, 21);
+  push_text_centered(c->parent->root->dl, &s.font, text, rect.center(),
+                     {true, true}, {1, 1, 1, 1}, 21);
 
   return clicked;
 }
@@ -1480,10 +1481,10 @@ void text_input(StaticString<N> *str)
   }
 
   f32 cursor_pos =
-      text_pos + get_text_width(font, str->to_str().sub(0, cursor_idx), 1);
+      text_pos + get_text_width(s.font, str->to_str().sub(0, cursor_idx), 1);
   f32 highlight_start_pos =
       text_pos +
-      get_text_width(font, str->to_str().sub(0, highlight_start_idx), 1);
+      get_text_width(s.font, str->to_str().sub(0, highlight_start_idx), 1);
   if (cursor_pos < rect.x) {
     // add one just to make sure cursor is fully in the rect.
     text_pos += rect.x - cursor_pos + 1;
@@ -1510,7 +1511,7 @@ void text_input(StaticString<N> *str)
 
   if (selected) {
     if (clicked) {
-      cursor_idx = char_index_at_pos(&font, str->to_str(),
+      cursor_idx = char_index_at_pos(&s.font, str->to_str(),
                                      {text_pos, rect.y + (rect.height / 2)},
                                      s.input->mouse_pos);
       reset_cursor();
@@ -1519,7 +1520,7 @@ void text_input(StaticString<N> *str)
       if (s.just_started_being_dragging == id) {
         highlight_start_idx = cursor_idx;
       }
-      cursor_idx = char_index_at_pos(&font, str->to_str(),
+      cursor_idx = char_index_at_pos(&s.font, str->to_str(),
                                      {text_pos, rect.y + (rect.height / 2)},
                                      s.input->mouse_pos);
     }
@@ -1608,7 +1609,7 @@ void text_input(StaticString<N> *str)
     push_rect(c->parent->root->dl, highlight_rect, highlight);
   }
 
-  push_text_centered(c->parent->root->dl, str->to_str(),
+  push_text_centered(c->parent->root->dl, &s.font, str->to_str(),
                      {text_pos, rect.y + (rect.height / 2)}, {false, true},
                      {1, 1, 1, 1}, 21);
 
@@ -1627,44 +1628,48 @@ void text_input(StaticString<N> *str)
   }
 }
 
-void debug_ui_test(Input *input, Pipeline pipeline, Vec2f canvas_size)
+API void init_dui()
 {
-  static b8 init = false;
-  if (!init) {
-    init = true;
-    init_draw_list(&main_dl, pipeline);
-    init_draw_list(&forground_dl, pipeline);
-    for (i32 i = 0; i < s.draw_lists.MAX_SIZE; i++) {
-      s.draw_lists.push_back({});
-      init_draw_list(&s.draw_lists[i], pipeline);
-    }
-
-    s.empty_group      = create_group(nullptr, {});
-    s.fullscreen_group = s.empty_group;
-
-    // FileData font_file =
-    // read_entire_file("resources/fonts/RobotoCondensed_Bold.ttf"); font =
-    // load_font(font_file, 64, memory.temp);
-
-    // EMPTY_TEX            = Texture2D(1, 1, TextureFormat::RGBA8, false);
-    // u8 empty_tex_data[4] = {255, 255, 255, 255};
-    // EMPTY_TEX.upload(empty_tex_data, false);
+  init_draw_list(&s.main_dl);
+  init_draw_list(&s.forground_dl);
+  for (i32 i = 0; i < s.draw_lists.MAX_SIZE; i++) {
+    s.draw_lists.push_back({});
+    init_draw_list(&s.draw_lists[i]);
   }
 
+  s.empty_group      = create_group(nullptr, {});
+  s.fullscreen_group = s.empty_group;
+
+  // FileData font_file =
+  // read_entire_file("resources/fonts/RobotoCondensed_Bold.ttf"); font =
+  // load_font(font_file, 64, memory.temp);
+
+  // EMPTY_TEX            = Texture2D(1, 1, TextureFormat::RGBA8, false);
+  // u8 empty_tex_data[4] = {255, 255, 255, 255};
+  // EMPTY_TEX.upload(empty_tex_data, false);
+
+  s.font =
+      load_font("resources/fonts/OpenSans-Regular.ttf", 21, &system_allocator);
+}
+
+API void debug_ui_test(Input *input, Vec2f canvas_size)
+{
   static b8 paused = false;
   if (input->keys[(i32)Keys::LCTRL] && input->key_down_events[(i32)Keys::Q]) {
     paused = !paused;
   }
 
   if (paused) {
-    draw_draw_list(pipeline, &main_dl, canvas_size);
-    draw_draw_list(pipeline, &forground_dl, canvas_size);
-    for (i32 i = 0; i < s.draw_lists.size; i++) {
-      draw_draw_list(pipeline, &s.draw_lists[i], canvas_size);
-    }
+    // draw_draw_list(&s.main_dl, canvas_size);
+    // draw_draw_list(&s.forground_dl, canvas_size);
+    // for (i32 i = 0; i < s.draw_lists.size; i++) {
+    //   draw_draw_list(&s.draw_lists[i], canvas_size);
+    // }
 
     return;
   }
+
+  info("size: ", canvas_size.x, ", ", canvas_size.y);
 
   start_frame(input, canvas_size);
 
@@ -1767,12 +1772,15 @@ void debug_ui_test(Input *input, Pipeline pipeline, Vec2f canvas_size)
     groups.push_back(&s.groups[i]);
   }
 
-  for (i32 i = s.root_groups.size - 1; i >= 0; i--) {
-    draw_draw_list(pipeline, s.root_groups[i]->dl, canvas_size);
-  }
-  draw_draw_list(pipeline, &main_dl, canvas_size);
-  draw_draw_list(pipeline, &forground_dl, canvas_size);
+  // for (i32 i = s.root_groups.size - 1; i >= 0; i--) {
+  //   draw_draw_list(s.root_groups[i]->dl, canvas_size);
+  // }
+  // draw_draw_list(&s.main_dl, canvas_size);
+  // draw_draw_list(&s.forground_dl, canvas_size);
 }
+
+API DuiState *get_dui_state() { return &s; }
+
 }  // namespace Dui
 
 /*

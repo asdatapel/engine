@@ -42,8 +42,12 @@ struct DuiState {
   Group *top_root_group_at_mouse_pos = nullptr;
 
   // text input state
-  i32 cursor_idx = 0;
+  i32 cursor_idx          = 0;
   i32 highlight_start_idx = 0;
-  f32 text_pos   = 0.f;
+  f32 text_pos            = 0.f;
+
+  DrawList main_dl;
+  DrawList forground_dl;
+  Font font;
 };
 }  // namespace Dui
