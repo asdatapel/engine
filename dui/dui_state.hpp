@@ -46,8 +46,8 @@ struct DuiState {
   i32 highlight_start_idx = 0;
   f32 text_pos            = 0.f;
 
+  GlobalDrawListData gdld;
   DrawList main_dl;
   DrawList forground_dl;
-  Font font;
 };
 }  // namespace Dui

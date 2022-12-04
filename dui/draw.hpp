@@ -9,6 +9,15 @@
 namespace Dui
 {
 
+struct GlobalDrawListData {
+  ImageBuffer image;
+  VkImageView image_view;
+  VkSampler sampler;
+  VkDescriptorSet desc_set;
+
+  Font font;
+};
+
 struct Vertex {
   Vec2f pos;
   Vec2f uv;
@@ -35,24 +44,35 @@ struct DrawList {
   void pop_scissor() { scissors.pop(); }
 
   Buffer vb;
-  // VkDescriptorSet desc_set;
 };
 
-void init_draw_list(DrawList *dl)
+GlobalDrawListData init_draw_system(Device *device, Pipeline pipeline)
+{
+  GlobalDrawListData gdld;
+
+  // TODO: create pipeline here
+
+  gdld.font =
+      load_font("resources/fonts/OpenSans-Regular.ttf", 21, &system_allocator);
+
+  gdld.image =
+      create_image(device, gdld.font.atlas.width, gdld.font.atlas.height);
+  gdld.image_view = create_image_view(device, gdld.image);
+  gdld.sampler    = create_sampler(device);
+  upload_image(device, gdld.image, gdld.font.atlas);
+
+  gdld.desc_set = create_descriptor_set(device, pipeline);
+  write_sampler(device, gdld.desc_set, gdld.image_view, gdld.sampler);
+
+  return gdld;
+}
+
+void init_draw_list(DrawList *dl, Device *device)
 {
   dl->verts      = (Vertex *)malloc(sizeof(Vertex) * 1024 * 1024);
   dl->draw_calls = (DrawCall *)malloc(sizeof(DrawCall) * 1024 * 1024);
 
-  // dl->vb = create_vertex_buffer(MB);
-
-  // ImageBuffer image      = create_image(font.atlas.width, font.atlas.height);
-  // VkImageView image_view = create_image_view(image);
-  // VkSampler sampler      = create_sampler();
-  // upload_image(image, font.atlas);
-
-  // dl->desc_set = create_descriptor_set(pipeline);
-  // write_sampler(dl->desc_set, image_view, sampler);
-  // vkDeviceWaitIdle(vk.device);
+  dl->vb = create_vertex_buffer(device, MB);
 }
 
 void clear_draw_list(DrawList *dl)
@@ -61,25 +81,26 @@ void clear_draw_list(DrawList *dl)
   dl->draw_call_count = 0;
 }
 
-void draw_draw_list(DrawList *dl, Vec2f canvas_size)
+void draw_draw_list(DrawList *dl, GlobalDrawListData *gdld, Device *device,
+                    Pipeline pipeline, Vec2f canvas_size)
 {
-  // upload_buffer_staged(dl->vb, dl->verts, dl->vert_count * sizeof(Vertex));
-  // bind_descriptor_set(pipeline, dl->desc_set);
+  upload_buffer_staged(device, dl->vb, dl->verts,
+                       dl->vert_count * sizeof(Vertex));
+  bind_descriptor_set(device, pipeline, gdld->desc_set);
 
-  // push_constant(pipeline, &canvas_size, sizeof(Vec2f));
-  // for (i32 i = 0; i < dl->draw_call_count; i++) {
-  //   DrawCall call = dl->draw_calls[i];
+  push_constant(device, pipeline, &canvas_size, sizeof(Vec2f));
+  for (i32 i = 0; i < dl->draw_call_count; i++) {
+    DrawCall call = dl->draw_calls[i];
 
-  //   set_scissor(call.scissor);
-  //   draw_vertex_buffer(dl->vb, call.vert_offset, call.tri_count * 3);
-  // }
+    set_scissor(device, call.scissor);
+    draw_vertex_buffer(device, dl->vb, call.vert_offset, call.tri_count * 3);
+  }
 }
 
 void push_vert(DrawList *dl, Vec2f pos, Vec2f uv, Color color,
                f32 texture_blend_factor = 0.f)
 {
-  dl->verts[dl->vert_count++] = {
-      pos, uv, color, texture_blend_factor};
+  dl->verts[dl->vert_count++] = {pos, uv, color, texture_blend_factor};
 }
 
 void push_draw_call(DrawList *dl, i32 tri_count)
@@ -114,19 +135,20 @@ void push_rect(DrawList *dl, Rect rect, Color color)
   push_draw_call(dl, 2);
 }
 
-void push_text(DrawList *dl, Font *font, String text, Vec2f pos, Color color, f32 height)
+void push_text(DrawList *dl, GlobalDrawListData *gdld, String text, Vec2f pos,
+               Color color, f32 height)
 {
-  f32 baseline     = font->baseline;
-  f32 resize_ratio = height / font->font_size_px;
+  f32 baseline     = gdld->font.baseline;
+  f32 resize_ratio = height / gdld->font.font_size_px;
   for (int i = 0; i < text.size; i++) {
-    Character c     = font->characters[text.data[i]];
+    Character c     = gdld->font.characters[text.data[i]];
     Rect shape_rect = {
         pos.x + c.shape.x * resize_ratio, pos.y + (c.shape.y) * resize_ratio,
         c.shape.width * resize_ratio, c.shape.height * resize_ratio};
     pos.x += c.advance * resize_ratio;
 
-    shape_rect.x      = floorf(shape_rect.x);
-    shape_rect.y      = floorf(shape_rect.y);
+    shape_rect.x = floorf(shape_rect.x);
+    shape_rect.y = floorf(shape_rect.y);
 
     push_vert(dl, {shape_rect.x, shape_rect.y}, {c.uv.x, c.uv.y + c.uv.height},
               color, color.a);
@@ -147,18 +169,18 @@ void push_text(DrawList *dl, Font *font, String text, Vec2f pos, Color color, f3
   }
 };
 
-void push_text_centered(DrawList *dl, Font *font, String text, Vec2f pos, Vec2b center,
-                        Color color, f32 height)
+void push_text_centered(DrawList *dl, GlobalDrawListData *gdld, String text,
+                        Vec2f pos, Vec2b center, Color color, f32 height)
 {
-  f32 resize_ratio = height / font->font_size_px;
-  f32 line_width   = get_text_width(*font, text, resize_ratio);
+  f32 resize_ratio = height / gdld->font.font_size_px;
+  f32 line_width   = get_text_width(gdld->font, text, resize_ratio);
 
   Vec2f centered_pos;
   centered_pos.x = center.x ? pos.x - line_width / 2 : pos.x;
   centered_pos.y =
-      center.y ? pos.y + (font->ascent + font->descent) / 2.f : pos.y;
+      center.y ? pos.y + (gdld->font.ascent + gdld->font.descent) / 2.f : pos.y;
 
-  push_text(dl, font, text, centered_pos, color, height);
+  push_text(dl, gdld, text, centered_pos, color, height);
 }
 
 // TODO allow pushing a temporary drawcall then can be updated later.

@@ -34,11 +34,11 @@ struct Device {
   VkDescriptorPool descriptor_pool;
 };
 
-Device vk;
-
-void init_device(Platform::VulkanExtensions vulkan_extensions,
-                 b8 enable_validation = true)
+Device init_device(Platform::VulkanExtensions vulkan_extensions,
+                   b8 enable_validation = true)
 {
+  Device device;
+
   VkApplicationInfo app_info{};
   app_info.sType              = VK_STRUCTURE_TYPE_APPLICATION_INFO;
   app_info.pApplicationName   = "Hello Triangle";
@@ -61,7 +61,7 @@ void init_device(Platform::VulkanExtensions vulkan_extensions,
     create_info.ppEnabledLayerNames = validation_layers;
   }
 
-  if (vkCreateInstance(&create_info, nullptr, &vk.vulkan_instance) !=
+  if (vkCreateInstance(&create_info, nullptr, &device.vulkan_instance) !=
       VK_SUCCESS) {
     fatal("failed to create vulkan instance!");
   }
@@ -69,14 +69,14 @@ void init_device(Platform::VulkanExtensions vulkan_extensions,
   // select physical device
   {
     u32 device_count = 0;
-    vkEnumeratePhysicalDevices(vk.vulkan_instance, &device_count, nullptr);
+    vkEnumeratePhysicalDevices(device.vulkan_instance, &device_count, nullptr);
     if (device_count == 0) {
       fatal("failed to find GPUs with Vulkan support!");
     }
     VkPhysicalDevice vulkan_physical_devices[128];
-    vkEnumeratePhysicalDevices(vk.vulkan_instance, &device_count,
+    vkEnumeratePhysicalDevices(device.vulkan_instance, &device_count,
                                vulkan_physical_devices);
-    vk.physical_device = vulkan_physical_devices[0];
+    device.physical_device = vulkan_physical_devices[0];
   }
 
   // select queue family
@@ -84,11 +84,11 @@ void init_device(Platform::VulkanExtensions vulkan_extensions,
     u32 queue_family_count = 0;
     VkQueueFamilyProperties queue_families[128];
     vkGetPhysicalDeviceQueueFamilyProperties(
-        vk.physical_device, &queue_family_count, queue_families);
+        device.physical_device, &queue_family_count, queue_families);
     for (i32 i = 0; i < queue_family_count; i++) {
       VkQueueFamilyProperties queue_family = queue_families[i];
       if (queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-        vk.graphics_queue_family = i;
+        device.graphics_queue_family = i;
         break;
       }
     }
@@ -99,7 +99,7 @@ void init_device(Platform::VulkanExtensions vulkan_extensions,
     f32 queue_priorities[] = {1.f};
     VkDeviceQueueCreateInfo queue_create_info{};
     queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    queue_create_info.queueFamilyIndex = vk.graphics_queue_family;
+    queue_create_info.queueFamilyIndex = device.graphics_queue_family;
     queue_create_info.queueCount       = 1;
     queue_create_info.pQueuePriorities = queue_priorities;
 
@@ -113,30 +113,31 @@ void init_device(Platform::VulkanExtensions vulkan_extensions,
     create_info.ppEnabledExtensionNames = extensions;
     create_info.enabledExtensionCount   = 1;
 
-    if (vkCreateDevice(vk.physical_device, &create_info, nullptr, &vk.device) !=
-        VK_SUCCESS) {
+    if (vkCreateDevice(device.physical_device, &create_info, nullptr,
+                       &device.device) != VK_SUCCESS) {
       fatal("failed to create logical device!");
     }
   }
 
-  vkGetDeviceQueue(vk.device, vk.graphics_queue_family, 0, &vk.graphics_queue);
+  vkGetDeviceQueue(device.device, device.graphics_queue_family, 0,
+                   &device.graphics_queue);
 
   VkCommandPoolCreateInfo pool_info{};
   pool_info.sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
   pool_info.flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-  pool_info.queueFamilyIndex = vk.graphics_queue_family;
-  if (vkCreateCommandPool(vk.device, &pool_info, nullptr, &vk.command_pool) !=
-      VK_SUCCESS) {
+  pool_info.queueFamilyIndex = device.graphics_queue_family;
+  if (vkCreateCommandPool(device.device, &pool_info, nullptr,
+                          &device.command_pool) != VK_SUCCESS) {
     fatal("failed to create command pool!");
   }
 
   VkCommandBufferAllocateInfo alloc_info{};
   alloc_info.sType       = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  alloc_info.commandPool = vk.command_pool;
+  alloc_info.commandPool = device.command_pool;
   alloc_info.level       = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
   alloc_info.commandBufferCount = 1;
-  if (vkAllocateCommandBuffers(vk.device, &alloc_info, &vk.command_buffer) !=
-      VK_SUCCESS) {
+  if (vkAllocateCommandBuffers(device.device, &alloc_info,
+                               &device.command_buffer) != VK_SUCCESS) {
     fatal("failed to allocate command buffers!");
   }
 
@@ -157,18 +158,20 @@ void init_device(Platform::VulkanExtensions vulkan_extensions,
     pool_info.pPoolSizes    = pool_sizes;
     pool_info.maxSets       = 1000;
 
-    if (vkCreateDescriptorPool(vk.device, &pool_info, nullptr,
-                               &vk.descriptor_pool) != VK_SUCCESS) {
+    if (vkCreateDescriptorPool(device.device, &pool_info, nullptr,
+                               &device.descriptor_pool) != VK_SUCCESS) {
       fatal("failed to create descriptor pool!");
     }
   }
+
+  return device;
 }
 
-void init_swap_chain()
+void init_swap_chain(Device *device)
 {
   VkSurfaceCapabilitiesKHR capabilities;
-  vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vk.physical_device, vk.surface,
-                                            &capabilities);
+  vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device->physical_device,
+                                            device->surface, &capabilities);
   info("minImageCount: ", capabilities.minImageCount,
        ", maxImageCount: ", capabilities.maxImageCount,
        ", currentExtent.w: ", capabilities.currentExtent.width,
@@ -177,11 +180,11 @@ void init_swap_chain()
 
   u32 formatCount;
   VkSurfaceFormatKHR formats[128];
-  vkGetPhysicalDeviceSurfaceFormatsKHR(vk.physical_device, vk.surface,
+  vkGetPhysicalDeviceSurfaceFormatsKHR(device->physical_device, device->surface,
                                        &formatCount, nullptr);
   if (formatCount != 0) {
-    vkGetPhysicalDeviceSurfaceFormatsKHR(vk.physical_device, vk.surface,
-                                         &formatCount, formats);
+    vkGetPhysicalDeviceSurfaceFormatsKHR(
+        device->physical_device, device->surface, &formatCount, formats);
   }
   for (i32 i = 0; i < formatCount; i++) {
     info("format: ", i, ", format.colorspace: ", formats[i].colorSpace,
@@ -189,11 +192,12 @@ void init_swap_chain()
   }
 
   u32 presentModeCount;
-  vkGetPhysicalDeviceSurfacePresentModesKHR(vk.physical_device, vk.surface,
-                                            &presentModeCount, nullptr);
+  vkGetPhysicalDeviceSurfacePresentModesKHR(
+      device->physical_device, device->surface, &presentModeCount, nullptr);
   VkPresentModeKHR present_modes[128];
   if (presentModeCount != 0) {
-    vkGetPhysicalDeviceSurfacePresentModesKHR(vk.physical_device, vk.surface,
+    vkGetPhysicalDeviceSurfacePresentModesKHR(device->physical_device,
+                                              device->surface,
                                               &presentModeCount, present_modes);
   }
   for (i32 i = 0; i < presentModeCount; i++) {
@@ -207,12 +211,12 @@ void init_swap_chain()
   VkPresentModeKHR present_mode = VkPresentModeKHR::VK_PRESENT_MODE_FIFO_KHR;
   VkExtent2D extent             = capabilities.currentExtent;
 
-  vk.swap_chain_image_format = surface_format.format;
-  vk.swap_chain_extent       = extent;
+  device->swap_chain_image_format = surface_format.format;
+  device->swap_chain_extent       = extent;
 
   VkSwapchainCreateInfoKHR create_info{};
   create_info.sType            = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-  create_info.surface          = vk.surface;
+  create_info.surface          = device->surface;
   create_info.minImageCount    = 2;
   create_info.imageFormat      = surface_format.format;
   create_info.imageColorSpace  = surface_format.colorSpace;
@@ -228,24 +232,25 @@ void init_swap_chain()
   create_info.preTransform          = capabilities.currentTransform;
   create_info.compositeAlpha        = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 
-  if (vkCreateSwapchainKHR(vk.device, &create_info, nullptr, &vk.swap_chain) !=
-      VK_SUCCESS) {
+  if (vkCreateSwapchainKHR(device->device, &create_info, nullptr,
+                           &device->swap_chain) != VK_SUCCESS) {
     fatal("failed to create swap chain");
   }
 
   u32 image_count;
-  vkGetSwapchainImagesKHR(vk.device, vk.swap_chain, &image_count, nullptr);
-  vk.swap_chain_images.resize(image_count);
-  vkGetSwapchainImagesKHR(vk.device, vk.swap_chain, &image_count,
-                          vk.swap_chain_images.data);
+  vkGetSwapchainImagesKHR(device->device, device->swap_chain, &image_count,
+                          nullptr);
+  device->swap_chain_images.resize(image_count);
+  vkGetSwapchainImagesKHR(device->device, device->swap_chain, &image_count,
+                          device->swap_chain_images.data);
 
-  vk.swap_chain_image_views.resize(vk.swap_chain_images.size);
-  for (i32 i = 0; i < vk.swap_chain_images.size; i++) {
+  device->swap_chain_image_views.resize(device->swap_chain_images.size);
+  for (i32 i = 0; i < device->swap_chain_images.size; i++) {
     VkImageViewCreateInfo create_info{};
     create_info.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    create_info.image    = vk.swap_chain_images[i];
+    create_info.image    = device->swap_chain_images[i];
     create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    create_info.format   = vk.swap_chain_image_format;
+    create_info.format   = device->swap_chain_image_format;
 
     create_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
     create_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -258,29 +263,31 @@ void init_swap_chain()
     create_info.subresourceRange.baseArrayLayer = 0;
     create_info.subresourceRange.layerCount     = 1;
 
-    if (vkCreateImageView(vk.device, &create_info, nullptr,
-                          &vk.swap_chain_image_views[i]) != VK_SUCCESS) {
+    if (vkCreateImageView(device->device, &create_info, nullptr,
+                          &device->swap_chain_image_views[i]) != VK_SUCCESS) {
       fatal("failed to create image views!");
     }
   }
 }
-void destroy_swap_chain()
+void destroy_swap_chain(Device *device)
 {
-  for (i32 i = 0; i < vk.swap_chain_framebuffers.size; i++) {
-    vkDestroyFramebuffer(vk.device, vk.swap_chain_framebuffers[i], nullptr);
+  for (i32 i = 0; i < device->swap_chain_framebuffers.size; i++) {
+    vkDestroyFramebuffer(device->device, device->swap_chain_framebuffers[i],
+                         nullptr);
   }
-  vk.swap_chain_framebuffers.clear();
-  for (i32 i = 0; i < vk.swap_chain_image_views.size; i++) {
-    vkDestroyImageView(vk.device, vk.swap_chain_image_views[i], nullptr);
+  device->swap_chain_framebuffers.clear();
+  for (i32 i = 0; i < device->swap_chain_image_views.size; i++) {
+    vkDestroyImageView(device->device, device->swap_chain_image_views[i],
+                       nullptr);
   }
-  vk.swap_chain_image_views.clear();
-  vkDestroySwapchainKHR(vk.device, vk.swap_chain, nullptr);
+  device->swap_chain_image_views.clear();
+  vkDestroySwapchainKHR(device->device, device->swap_chain, nullptr);
 }
 
-void init_render_pass()
+void init_render_pass(Device *device)
 {
   VkAttachmentDescription color_attachment{};
-  color_attachment.format         = vk.swap_chain_image_format;
+  color_attachment.format         = device->swap_chain_image_format;
   color_attachment.samples        = VK_SAMPLE_COUNT_1_BIT;
   color_attachment.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
   color_attachment.storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
@@ -315,47 +322,48 @@ void init_render_pass()
   render_pass_info.dependencyCount = 1;
   render_pass_info.pDependencies   = &dependency;
 
-  if (vkCreateRenderPass(vk.device, &render_pass_info, nullptr,
-                         &vk.render_pass) != VK_SUCCESS) {
+  if (vkCreateRenderPass(device->device, &render_pass_info, nullptr,
+                         &device->render_pass) != VK_SUCCESS) {
     fatal("failed to create render pass!");
   }
 }
 
-void create_framebuffers()
+void create_framebuffers(Device *device)
 {
-  vk.swap_chain_framebuffers.resize(vk.swap_chain_image_views.size);
-  for (u32 i = 0; i < vk.swap_chain_framebuffers.size; i++) {
-    VkImageView attachments[] = {vk.swap_chain_image_views[i]};
+  device->swap_chain_framebuffers.resize(device->swap_chain_image_views.size);
+  for (u32 i = 0; i < device->swap_chain_framebuffers.size; i++) {
+    VkImageView attachments[] = {device->swap_chain_image_views[i]};
 
     VkFramebufferCreateInfo framebufferInfo{};
     framebufferInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    framebufferInfo.renderPass      = vk.render_pass;
+    framebufferInfo.renderPass      = device->render_pass;
     framebufferInfo.attachmentCount = 1;
     framebufferInfo.pAttachments    = attachments;
-    framebufferInfo.width           = vk.swap_chain_extent.width;
-    framebufferInfo.height          = vk.swap_chain_extent.height;
+    framebufferInfo.width           = device->swap_chain_extent.width;
+    framebufferInfo.height          = device->swap_chain_extent.height;
     framebufferInfo.layers          = 1;
 
-    if (vkCreateFramebuffer(vk.device, &framebufferInfo, nullptr,
-                            &vk.swap_chain_framebuffers[i]) != VK_SUCCESS) {
+    if (vkCreateFramebuffer(device->device, &framebufferInfo, nullptr,
+                            &device->swap_chain_framebuffers[i]) !=
+        VK_SUCCESS) {
       fatal("failed to create framebuffer!");
     }
   }
 }
 
-void recreate_swap_chain()
+void recreate_swap_chain(Device *device)
 {
-  vkDeviceWaitIdle(vk.device);
+  vkDeviceWaitIdle(device->device);
 
-  destroy_swap_chain();
-  init_swap_chain();
-  create_framebuffers();
+  destroy_swap_chain(device);
+  init_swap_chain(device);
+  create_framebuffers(device);
 }
 
 VkSemaphore image_available_semaphore;
 VkSemaphore render_finished_semaphore;
 VkFence in_flight_fence;
-void create_sync_objects()
+void create_sync_objects(Device *device)
 {
   VkSemaphoreCreateInfo semaphoreInfo{};
   semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -364,55 +372,58 @@ void create_sync_objects()
   fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
   fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-  if (vkCreateSemaphore(vk.device, &semaphoreInfo, nullptr,
+  if (vkCreateSemaphore(device->device, &semaphoreInfo, nullptr,
                         &image_available_semaphore) != VK_SUCCESS ||
-      vkCreateSemaphore(vk.device, &semaphoreInfo, nullptr,
+      vkCreateSemaphore(device->device, &semaphoreInfo, nullptr,
                         &render_finished_semaphore) != VK_SUCCESS ||
-      vkCreateFence(vk.device, &fenceInfo, nullptr, &in_flight_fence) !=
+      vkCreateFence(device->device, &fenceInfo, nullptr, &in_flight_fence) !=
           VK_SUCCESS) {
     fatal("failed to create semaphores!");
   }
 }
-void destroy_sync_objects()
+void destroy_sync_objects(Device *device)
 {
-  vkDestroySemaphore(vk.device, image_available_semaphore, nullptr);
-  vkDestroySemaphore(vk.device, render_finished_semaphore, nullptr);
-  vkDestroyFence(vk.device, in_flight_fence, nullptr);
+  vkDestroySemaphore(device->device, image_available_semaphore, nullptr);
+  vkDestroySemaphore(device->device, render_finished_semaphore, nullptr);
+  vkDestroyFence(device->device, in_flight_fence, nullptr);
 }
 
-void init_vulkan(Platform::GlfwWindow *window)
+Device init_vulkan(Platform::GlfwWindow *window)
 {
-  init_device(window->get_vulkan_extensions());
-  glfwCreateWindowSurface(vk.vulkan_instance, window->ref, nullptr,
-                          &vk.surface);
-  init_swap_chain();
-  init_render_pass();
-  create_framebuffers();
-  create_sync_objects();
+  Device device = init_device(window->get_vulkan_extensions());
+  glfwCreateWindowSurface(device.vulkan_instance, window->ref, nullptr,
+                          &device.surface);
+  init_swap_chain(&device);
+  init_render_pass(&device);
+  create_framebuffers(&device);
+  create_sync_objects(&device);
+
+  return device;
 }
 
-void destroy_vulkan()
+void destroy_vulkan(Device *device)
 {
-  vkDeviceWaitIdle(vk.device);
+  vkDeviceWaitIdle(device->device);
 
-  destroy_swap_chain();
+  destroy_swap_chain(device);
 
-  destroy_sync_objects();
+  destroy_sync_objects(device);
 
-  vkDestroyCommandPool(vk.device, vk.command_pool, nullptr);
+  vkDestroyCommandPool(device->device, device->command_pool, nullptr);
 
-  vkDestroyRenderPass(vk.device, vk.render_pass, nullptr);
+  vkDestroyRenderPass(device->device, device->render_pass, nullptr);
 
-  vkDestroySurfaceKHR(vk.vulkan_instance, vk.surface, nullptr);
+  vkDestroySurfaceKHR(device->vulkan_instance, device->surface, nullptr);
 
-  vkDestroyDevice(vk.device, nullptr);
-  vkDestroyInstance(vk.vulkan_instance, nullptr);
+  vkDestroyDevice(device->device, nullptr);
+  vkDestroyInstance(device->vulkan_instance, nullptr);
 }
 
-u32 find_memory_type(u32 type_filter, VkMemoryPropertyFlags properties)
+u32 find_memory_type(Device *device, u32 type_filter,
+                     VkMemoryPropertyFlags properties)
 {
   VkPhysicalDeviceMemoryProperties mem_properties;
-  vkGetPhysicalDeviceMemoryProperties(vk.physical_device, &mem_properties);
+  vkGetPhysicalDeviceMemoryProperties(device->physical_device, &mem_properties);
   for (u32 i = 0; i < mem_properties.memoryTypeCount; i++) {
     if ((type_filter & (1 << i)) &&
         (mem_properties.memoryTypes[i].propertyFlags & properties) ==

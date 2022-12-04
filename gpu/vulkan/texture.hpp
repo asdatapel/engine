@@ -2,15 +2,15 @@
 
 #include "buffer.hpp"
 #include "gpu/vulkan/device.hpp"
-#include "image.hpp"
 #include "gpu/vulkan/vulkan.hpp"
+#include "image.hpp"
 
 struct ImageBuffer {
   VkImage image;
   VkDeviceMemory memory;
 };
 
-ImageBuffer create_image(u32 width, u32 height)
+ImageBuffer create_image(Device *device, u32 width, u32 height)
 {
   VkImageCreateInfo image_info{};
   image_info.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -30,38 +30,39 @@ ImageBuffer create_image(u32 width, u32 height)
   image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
   VkImage image_ref;
-  if (vkCreateImage(vk.device, &image_info, nullptr, &image_ref) !=
+  if (vkCreateImage(device->device, &image_info, nullptr, &image_ref) !=
       VK_SUCCESS) {
     fatal("failed to create image!");
   }
 
   VkMemoryRequirements mem_requirements;
-  vkGetImageMemoryRequirements(vk.device, image_ref, &mem_requirements);
+  vkGetImageMemoryRequirements(device->device, image_ref, &mem_requirements);
 
   VkMemoryAllocateInfo alloc_info{};
   alloc_info.sType          = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
   alloc_info.allocationSize = mem_requirements.size;
   alloc_info.memoryTypeIndex =
-      find_memory_type(mem_requirements.memoryTypeBits,
+      find_memory_type(device, mem_requirements.memoryTypeBits,
                        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
                            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
   VkDeviceMemory memory;
-  if (vkAllocateMemory(vk.device, &alloc_info, nullptr, &memory) !=
+  if (vkAllocateMemory(device->device, &alloc_info, nullptr, &memory) !=
       VK_SUCCESS) {
     fatal("failed to allocate vertex buffer memory!");
   }
 
-  vkBindImageMemory(vk.device, image_ref, memory, 0);
+  vkBindImageMemory(device->device, image_ref, memory, 0);
 
   ImageBuffer image;
-  image.image    = image_ref;
+  image.image  = image_ref;
   image.memory = memory;
   return image;
 };
 
-void transition_image_layout(VkCommandBuffer command_buffer, ImageBuffer image_buf,
-                             VkImageLayout old_layout, VkImageLayout new_layout)
+void transition_image_layout(Device *device, VkCommandBuffer command_buffer,
+                             ImageBuffer image_buf, VkImageLayout old_layout,
+                             VkImageLayout new_layout)
 {
   {
     VkImageMemoryBarrier barrier{};
@@ -106,25 +107,25 @@ void transition_image_layout(VkCommandBuffer command_buffer, ImageBuffer image_b
   }
 }
 
-void upload_image(ImageBuffer image_buf, Image image)
+void upload_image(Device *device, ImageBuffer image_buf, Image image)
 {
   if (image.size == 0) return;
 
   Buffer staging_buffer =
-      create_buffer(image.size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+      create_buffer(device, image.size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
                         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
-  upload_buffer(staging_buffer, image.data(), image.size);
+  upload_buffer(device, staging_buffer, image.data(), image.size);
 
   VkCommandBufferAllocateInfo alloc_info{};
   alloc_info.sType       = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
   alloc_info.level       = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-  alloc_info.commandPool = vk.command_pool;
+  alloc_info.commandPool = device->command_pool;
   alloc_info.commandBufferCount = 1;
 
   VkCommandBuffer temp_command_buffer;
-  vkAllocateCommandBuffers(vk.device, &alloc_info, &temp_command_buffer);
+  vkAllocateCommandBuffers(device->device, &alloc_info, &temp_command_buffer);
 
   VkCommandBufferBeginInfo begin_info{};
   begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -132,7 +133,8 @@ void upload_image(ImageBuffer image_buf, Image image)
 
   vkBeginCommandBuffer(temp_command_buffer, &begin_info);
 
-  transition_image_layout(temp_command_buffer, image_buf, VK_IMAGE_LAYOUT_UNDEFINED,
+  transition_image_layout(device, temp_command_buffer, image_buf,
+                          VK_IMAGE_LAYOUT_UNDEFINED,
                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
   {
     VkBufferImageCopy region{};
@@ -148,10 +150,11 @@ void upload_image(ImageBuffer image_buf, Image image)
     region.imageOffset = {0, 0, 0};
     region.imageExtent = {image.width, image.height, 1};
 
-    vkCmdCopyBufferToImage(temp_command_buffer, staging_buffer.ref, image_buf.image,
+    vkCmdCopyBufferToImage(temp_command_buffer, staging_buffer.ref,
+                           image_buf.image,
                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
   }
-  transition_image_layout(temp_command_buffer, image_buf,
+  transition_image_layout(device, temp_command_buffer, image_buf,
                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                           VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
@@ -162,15 +165,15 @@ void upload_image(ImageBuffer image_buf, Image image)
   submit_info.commandBufferCount = 1;
   submit_info.pCommandBuffers    = &temp_command_buffer;
 
-  vkQueueSubmit(vk.graphics_queue, 1, &submit_info, VK_NULL_HANDLE);
-  vkQueueWaitIdle(vk.graphics_queue);
+  vkQueueSubmit(device->graphics_queue, 1, &submit_info, VK_NULL_HANDLE);
+  vkQueueWaitIdle(device->graphics_queue);
 
-  vkFreeCommandBuffers(vk.device, vk.command_pool, 1, &temp_command_buffer);
+  vkFreeCommandBuffers(device->device, device->command_pool, 1, &temp_command_buffer);
 
-  destroy_buffer(staging_buffer);
+  destroy_buffer(device, staging_buffer);
 }
 
-VkImageView create_image_view(ImageBuffer image_buf)
+VkImageView create_image_view(Device *device, ImageBuffer image_buf)
 {
   VkImageViewCreateInfo view_info{};
   view_info.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -184,7 +187,7 @@ VkImageView create_image_view(ImageBuffer image_buf)
   view_info.subresourceRange.layerCount     = 1;
 
   VkImageView image_view;
-  if (vkCreateImageView(vk.device, &view_info, nullptr, &image_view) !=
+  if (vkCreateImageView(device->device, &view_info, nullptr, &image_view) !=
       VK_SUCCESS) {
     fatal("failed to create texture image view!");
   }
@@ -192,7 +195,7 @@ VkImageView create_image_view(ImageBuffer image_buf)
   return image_view;
 }
 
-VkSampler create_sampler()
+VkSampler create_sampler(Device *device)
 {
   VkSamplerCreateInfo sampler_info{};
   sampler_info.sType     = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -207,7 +210,7 @@ VkSampler create_sampler()
   sampler_info.maxAnisotropy    = 0;
 
   VkSampler sampler;
-  if (vkCreateSampler(vk.device, &sampler_info, nullptr, &sampler) !=
+  if (vkCreateSampler(device->device, &sampler_info, nullptr, &sampler) !=
       VK_SUCCESS) {
     fatal("failed to create texture sampler!");
   }
@@ -215,8 +218,8 @@ VkSampler create_sampler()
   return sampler;
 }
 
-void write_sampler(VkDescriptorSet descriptor_set, VkImageView image_view,
-                   VkSampler sampler)
+void write_sampler(Device *device, VkDescriptorSet descriptor_set,
+                   VkImageView image_view, VkSampler sampler)
 {
   VkDescriptorImageInfo image_info{};
   image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -232,7 +235,7 @@ void write_sampler(VkDescriptorSet descriptor_set, VkImageView image_view,
   descriptor_write.descriptorCount = 1;
   descriptor_write.pImageInfo      = &image_info;
 
-  vkUpdateDescriptorSets(vk.device, 1, &descriptor_write, 0, nullptr);
+  vkUpdateDescriptorSets(device->device, 1, &descriptor_write, 0, nullptr);
 }
 
 struct Texture {
@@ -243,13 +246,13 @@ struct Texture {
   VkDescriptorSet desc_set;
 };
 
-Texture create_texture()
+Texture create_texture(Device *device)
 {
   Texture tex;
 
-  tex.image_buffer      = create_image(256, 256);
-  tex.image_view_ref = create_image_view(tex.image_buffer);
-  tex.sampler_ref    = create_sampler();
+  tex.image_buffer   = create_image(device, 256, 256);
+  tex.image_view_ref = create_image_view(device, tex.image_buffer);
+  tex.sampler_ref    = create_sampler(device);
 
   // VkDescriptorSet desc_set = gpu->create_descriptor_set(pipeline);
   // vulkan.write_sampler(desc_set, image_view, sampler);
