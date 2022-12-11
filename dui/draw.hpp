@@ -23,6 +23,8 @@ struct Vertex {
   Vec2f uv;
   Color color;
   f32 texture_blend_factor;
+  Vec2f rect_corner;
+  Vec2f rect_center;
 };
 
 struct DrawCall {
@@ -98,9 +100,11 @@ void draw_draw_list(DrawList *dl, GlobalDrawListData *gdld, Device *device,
 }
 
 void push_vert(DrawList *dl, Vec2f pos, Vec2f uv, Color color,
+               Vec2f rect_corner, Vec2f rect_center,
                f32 texture_blend_factor = 0.f)
 {
-  dl->verts[dl->vert_count++] = {pos, uv, color, texture_blend_factor};
+  dl->verts[dl->vert_count++] = {
+      pos, uv, color, texture_blend_factor, rect_corner, rect_center};
 }
 
 void push_draw_call(DrawList *dl, i32 tri_count)
@@ -122,15 +126,43 @@ void push_draw_call(DrawList *dl, i32 tri_count)
   dl->draw_call_count++;
 }
 
+void push_tri(DrawList *dl, Vec2f p0, Vec2f p1, Vec2f p2, Color color)
+{
+  push_vert(dl, p0, {}, color, {0, 0}, {0, 0});
+  push_vert(dl, p1, {}, color, {0, 0}, {0, 0});
+  push_vert(dl, p2, {}, color, {0, 0}, {0, 0});
+
+  push_draw_call(dl, 1);
+}
+
+void push_quad(DrawList *dl, Vec2f p0, Vec2f p1, Vec2f p2, Vec2f p3,
+               Color color)
+{
+  push_vert(dl, p0, {}, color, {0, 0}, {0, 0});
+  push_vert(dl, p2, {}, color, {0, 0}, {0, 0});
+  push_vert(dl, p1, {}, color, {0, 0}, {0, 0});
+
+  push_vert(dl, p0, {}, color, {0, 0}, {0, 0});
+  push_vert(dl, p3, {}, color, {0, 0}, {0, 0});
+  push_vert(dl, p2, {}, color, {0, 0}, {0, 0});
+
+  push_draw_call(dl, 2);
+}
+
 void push_rect(DrawList *dl, Rect rect, Color color)
 {
-  push_vert(dl, {rect.x, rect.y}, {}, color);
-  push_vert(dl, {rect.x + rect.width, rect.y}, {}, color);
-  push_vert(dl, {rect.x + rect.width, rect.y + rect.height}, {}, color);
+  Vec2f corner = rect.span() / Vec2f(2.f, 2.f);
+  Vec2f center = rect.center();
 
-  push_vert(dl, {rect.x, rect.y}, {}, color);
-  push_vert(dl, {rect.x + rect.width, rect.y + rect.height}, {}, color);
-  push_vert(dl, {rect.x, rect.y + rect.height}, {}, color);
+  push_vert(dl, {rect.x, rect.y}, {}, color, corner, center);
+  push_vert(dl, {rect.x + rect.width, rect.y}, {}, color, corner, center);
+  push_vert(dl, {rect.x + rect.width, rect.y + rect.height}, {}, color, corner,
+            center);
+
+  push_vert(dl, {rect.x, rect.y}, {}, color, corner, center);
+  push_vert(dl, {rect.x + rect.width, rect.y + rect.height}, {}, color, corner,
+            center);
+  push_vert(dl, {rect.x, rect.y + rect.height}, {}, color, corner, center);
 
   push_draw_call(dl, 2);
 }
@@ -151,20 +183,21 @@ void push_text(DrawList *dl, GlobalDrawListData *gdld, String text, Vec2f pos,
     shape_rect.y = floorf(shape_rect.y);
 
     push_vert(dl, {shape_rect.x, shape_rect.y}, {c.uv.x, c.uv.y + c.uv.height},
-              color, color.a);
+              color, {0, 0}, {0, 0}, color.a);
     push_vert(dl, {shape_rect.x + shape_rect.width, shape_rect.y},
-              {c.uv.x + c.uv.width, c.uv.y + c.uv.height}, color, color.a);
+              {c.uv.x + c.uv.width, c.uv.y + c.uv.height}, color, {0, 0},
+              {0, 0}, color.a);
     push_vert(
         dl, {shape_rect.x + shape_rect.width, shape_rect.y + shape_rect.height},
-        {c.uv.x + c.uv.width, c.uv.y}, color, color.a);
+        {c.uv.x + c.uv.width, c.uv.y}, color, {0, 0}, {0, 0}, color.a);
 
     push_vert(dl, {shape_rect.x, shape_rect.y}, {c.uv.x, c.uv.y + c.uv.height},
-              color, color.a);
+              color, {0, 0}, {0, 0}, color.a);
     push_vert(
         dl, {shape_rect.x + shape_rect.width, shape_rect.y + shape_rect.height},
-        {c.uv.x + c.uv.width, c.uv.y}, color, color.a);
+        {c.uv.x + c.uv.width, c.uv.y}, color, {0, 0}, {0, 0}, color.a);
     push_vert(dl, {shape_rect.x, shape_rect.y + shape_rect.height},
-              {c.uv.x, c.uv.y}, color, color.a);
+              {c.uv.x, c.uv.y}, color, {0, 0}, {0, 0}, color.a);
     push_draw_call(dl, 2);
   }
 };

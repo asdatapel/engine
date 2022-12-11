@@ -10,9 +10,15 @@
 namespace Dui
 {
 
+struct ReloadData {
+  DuiState *dui_state;
+};
+API ReloadData api_get_plugin_reload_data();
+API void api_reload_plugin(ReloadData reload_data);
+
 API void api_init_dui(Device *device, Pipeline pipeline);
 API void api_debug_ui_test(Device *device, Pipeline pipeline, Input *input,
-                       Vec2f canvas_size);
+                           Vec2f canvas_size);
 API DuiState *api_get_dui_state();
 
 }  // namespace Dui

@@ -18,31 +18,48 @@ VertexDescriptions get_vertex_descriptions()
   VertexDescriptions vertex_descriptions;
 
   vertex_descriptions.binding_description.binding = 0;
-  vertex_descriptions.binding_description.stride  = 9 * sizeof(f32);
+  vertex_descriptions.binding_description.stride  = 13 * sizeof(f32);
   vertex_descriptions.binding_description.inputRate =
       VK_VERTEX_INPUT_RATE_VERTEX;
 
-  vertex_descriptions.vertex_attribute_descriptions.resize(4);
+  vertex_descriptions.vertex_attribute_descriptions.resize(6);
+
   vertex_descriptions.vertex_attribute_descriptions[0].binding  = 0;
   vertex_descriptions.vertex_attribute_descriptions[0].location = 0;
   vertex_descriptions.vertex_attribute_descriptions[0].format =
       VK_FORMAT_R32G32_SFLOAT;
   vertex_descriptions.vertex_attribute_descriptions[0].offset = 0 * sizeof(f32);
+
   vertex_descriptions.vertex_attribute_descriptions[1].binding  = 0;
   vertex_descriptions.vertex_attribute_descriptions[1].location = 1;
   vertex_descriptions.vertex_attribute_descriptions[1].format =
       VK_FORMAT_R32G32_SFLOAT;
   vertex_descriptions.vertex_attribute_descriptions[1].offset = 2 * sizeof(f32);
+
   vertex_descriptions.vertex_attribute_descriptions[2].binding  = 0;
   vertex_descriptions.vertex_attribute_descriptions[2].location = 2;
   vertex_descriptions.vertex_attribute_descriptions[2].format =
       VK_FORMAT_R32G32B32A32_SFLOAT;
   vertex_descriptions.vertex_attribute_descriptions[2].offset = 4 * sizeof(f32);
+
   vertex_descriptions.vertex_attribute_descriptions[3].binding  = 0;
   vertex_descriptions.vertex_attribute_descriptions[3].location = 3;
   vertex_descriptions.vertex_attribute_descriptions[3].format =
       VK_FORMAT_R32_SFLOAT;
   vertex_descriptions.vertex_attribute_descriptions[3].offset = 8 * sizeof(f32);
+
+  vertex_descriptions.vertex_attribute_descriptions[4].binding  = 0;
+  vertex_descriptions.vertex_attribute_descriptions[4].location = 4;
+  vertex_descriptions.vertex_attribute_descriptions[4].format =
+      VK_FORMAT_R32G32_SFLOAT;
+  vertex_descriptions.vertex_attribute_descriptions[4].offset = 9 * sizeof(f32);
+
+  vertex_descriptions.vertex_attribute_descriptions[5].binding  = 0;
+  vertex_descriptions.vertex_attribute_descriptions[5].location = 5;
+  vertex_descriptions.vertex_attribute_descriptions[5].format =
+      VK_FORMAT_R32G32_SFLOAT;
+  vertex_descriptions.vertex_attribute_descriptions[5].offset = 11 * sizeof(f32);
+
 
   return vertex_descriptions;
 }

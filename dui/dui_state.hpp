@@ -16,19 +16,17 @@ struct DuiState {
   StaticPool<Container, 1024> containers;
   StaticPool<Group, 1024> groups;
 
-  Array<Group *, 1024> root_groups;
+  Array<GroupId, 1024> root_groups;
+  GroupId fullscreen_group = -1;
+  GroupId empty_group      = -1;
 
-  Array<DrawList, 20> draw_lists;
+  // currently being worked on
+  GroupId cg = -1;
+  DuiId cw   = -1;
+  DuiId cc   = -1;
 
-  Group *cg     = nullptr;
-  Container *cw = nullptr;
-  Container *cc = nullptr;
-
-  Input *input;
+  Input *input = nullptr;
   Vec2f canvas_span;
-
-  Group *fullscreen_group = nullptr;
-  Group *empty_group      = nullptr;
 
   INTERACTION_STATE(hot);
   INTERACTION_STATE(active);
@@ -38,8 +36,8 @@ struct DuiState {
   Vec2f dragging_total_delta;
   Vec2f dragging_frame_delta;
 
-  i64 frame                          = 0;
-  Group *top_root_group_at_mouse_pos = nullptr;
+  i64 frame                           = 0;
+  GroupId top_root_group_at_mouse_pos = -1;
 
   // text input state
   i32 cursor_idx          = 0;
@@ -47,7 +45,10 @@ struct DuiState {
   f32 text_pos            = 0.f;
 
   GlobalDrawListData gdld;
+  Array<DrawList, 20> draw_lists; // TODO: make this dynamic
   DrawList main_dl;
   DrawList forground_dl;
+
+  i32 debug;
 };
 }  // namespace Dui

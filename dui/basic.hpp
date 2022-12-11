@@ -3,7 +3,7 @@
 #include "string.hpp"
 #include "types.hpp"
 
-typedef u64 DuiId;
+typedef i64 DuiId;
 
 namespace Dui
 {

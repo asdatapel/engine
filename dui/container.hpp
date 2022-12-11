@@ -7,14 +7,18 @@
 
 namespace Dui
 {
+
+const f32 SCROLLBAR_BORDER = 2.f;
+const f32 SCROLLBAR_SIZE = 6.f;
+
 struct Container {
   DuiId id;
   StaticString<128> title;
 
-  Group *parent = nullptr;
+  GroupId parent = -1;
 
   Vec2f scroll_offset_target = {0, 0};
-  Vec2f scroll_offset        = {0 ,0};
+  Vec2f scroll_offset        = {0, 0};
 
   Rect rect;
   Color color;
@@ -29,7 +33,7 @@ struct Container {
   i64 last_frame         = -1;
   // total space requested by content last frame. this is whats used to
   // determine free space and stretch controls to bounds.
-  Vec2f last_frame_minimum_content_span     = {0, 0};
+  Vec2f last_frame_minimum_content_span    = {0, 0};
   Vec2f current_frame_minimum_content_span = {0, 0};
   f32 debug_last_frame_height              = 0;
   f32 debug_last_frame_width               = 0;
@@ -39,10 +43,10 @@ struct Container {
     Rect rect = inset(this->rect, WINDOW_MARGIN_SIZE);
 
     if (last_frame_minimum_content_span.x > rect.width) {
-      rect.height -= 10;
+      rect.height -= SCROLLBAR_SIZE;
     }
     if (last_frame_minimum_content_span.y > rect.height) {
-      rect.width -= 10;
+      rect.width -= SCROLLBAR_SIZE;
     }
 
     return rect;
@@ -113,6 +117,7 @@ struct Container {
   // last_frame_minimum_content_span)
 };
 
+Container *get_container(DuiId id);
 Container *get_current_container(DuiState *s);
 
 }  // namespace Dui

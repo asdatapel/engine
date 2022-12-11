@@ -1,9 +1,10 @@
 #include <unordered_map>
 
+#include "dui/api.hpp"
 #include "dui/basic.hpp"
-#include "dui/dui.hpp"
 #include "dui/container.hpp"
 #include "dui/draw.hpp"
+#include "dui/dui.hpp"
 #include "dui/dui_state.hpp"
 #include "dui/group.hpp"
 #include "font.hpp"
@@ -31,8 +32,8 @@ DuiState s;
 b8 do_hot(DuiId id, Rect rect, Group *root_group = nullptr,
           Container *c = nullptr, Rect clip_rect = {})
 {
-  b8 is_in_top_group = !s.top_root_group_at_mouse_pos || !root_group ||
-                       (root_group == s.top_root_group_at_mouse_pos &&
+  b8 is_in_top_group = !s.top_root_group_at_mouse_pos.valid() || !root_group ||
+                       (root_group->id == s.top_root_group_at_mouse_pos &&
                         in_rect(s.input->mouse_pos, root_group->rect));
 
   b8 is_in_clip_rect =
@@ -144,21 +145,21 @@ namespace Dui
 i32 get_group_z(Group *g)
 {
   for (i32 i = 0; i < s.root_groups.size; i++) {
-    if (s.root_groups[i] == g) return i;
+    if (s.root_groups[i] == g->id) return i;
   }
   return -1;
 }
 
-b8 is_empty(Group *g) { return g == s.empty_group; }
+b8 is_empty(Group *g) { return g->id == s.empty_group; }
 
 void add_root_group(Group *g)
 {
   // sanity check
   assert(get_group_z(g) == -1);
 
-  i32 index = s.root_groups.insert(0, g);
-  g->parent = nullptr;
-  g->root   = g;
+  i32 index = s.root_groups.insert(0, g->id);
+  g->parent = -1;
+  g->root   = g->id;
   g->dl     = &s.draw_lists[index];
 }
 
@@ -171,10 +172,10 @@ void remove_root_group(Group *g)
 Group *create_group(Group *parent, Rect rect)
 {
   Group *g = s.groups.push_back({});
-  g->id    = rand();
+  g->id    = s.groups.index_of(g);
   g->rect  = rect;
 
-  g->parent = parent;
+  g->parent = parent ? parent->id : GroupId(-1);
   if (!parent) {
     add_root_group(g);
   }
@@ -184,7 +185,7 @@ Group *create_group(Group *parent, Rect rect)
 
 void free_group(Group *g)
 {
-  if (!g->parent) {
+  if (!g->parent.valid()) {
     i32 z = get_group_z(g);
     s.root_groups.shift_delete(z);
   }
@@ -193,7 +194,7 @@ void free_group(Group *g)
   s.groups.remove(index);
 }
 
-Container *get_container(DuiId id) { return &s.containers.wrapped_get(id); }
+Group *get_group(i64 id) { return &s.groups.wrapped_get(id); }
 
 // walks through children of parent_group until a leaf is found at the given
 // pos.
@@ -204,7 +205,7 @@ Group *get_leaf_group_at_pos(Vec2f pos, Group *parent_group)
   }
 
   for (i32 i = 0; i < parent_group->splits.size; i++) {
-    Group *g = parent_group->splits[i].child;
+    Group *g = parent_group->splits[i].child.get();
 
     Group *possible_result = get_leaf_group_at_pos(pos, g);
     if (possible_result) return possible_result;
@@ -215,8 +216,9 @@ Group *get_leaf_group_at_pos(Vec2f pos, Group *parent_group)
 Group *get_top_leaf_group_at_pos(Vec2f pos, b8 ignore_top = false)
 {
   for (i32 i = ignore_top ? 1 : 0; i < s.root_groups.size; i++) {
-    if (in_rect(pos, s.root_groups[i]->rect)) {
-      return get_leaf_group_at_pos(pos, s.root_groups[i]);
+    Group *g = s.root_groups[i].get();
+    if (in_rect(pos, g->rect)) {
+      return get_leaf_group_at_pos(pos, g);
     }
   }
   return nullptr;
@@ -225,14 +227,15 @@ Group *get_top_leaf_group_at_pos(Vec2f pos, b8 ignore_top = false)
 b8 contained_in(Group *g, Group *in)
 {
   if (g == in) return true;
-  if (g->parent == nullptr) return false;
-  return contained_in(g->parent, in);
+  if (!g->parent.valid()) return false;
+  return contained_in(g->parent.get(), in);
 }
 
-void propagate_groups(Group *g, Group *root = nullptr, Group *parent = nullptr)
+void propagate_groups(Group *g, GroupId root = -1, Group *parent = nullptr)
 {
-  if (parent) g->parent = parent;
-  g->root = root ? root : g;
+  if (parent) g->parent = parent->id;
+
+  g->root = root.valid() ? root : g->id;
 
   if (!g->is_leaf()) {
     f32 x = g->rect.x;
@@ -240,7 +243,7 @@ void propagate_groups(Group *g, Group *root = nullptr, Group *parent = nullptr)
 
     for (i32 i = 0; i < g->splits.size; i++) {
       Split &split = g->splits[i];
-      Group *child = split.child;
+      Group *child = split.child.get();
 
       if (g->split_axis == 0) {
         split.div_position = y;
@@ -261,7 +264,7 @@ void propagate_groups(Group *g, Group *root = nullptr, Group *parent = nullptr)
   } else {
     for (i32 i = 0; i < g->windows.size; i++) {
       Container *w = get_container(g->windows[i]);
-      w->parent    = g;
+      w->parent    = g->id;
       w->rect      = g->get_window_rect();
     }
   }
@@ -272,10 +275,11 @@ f32 get_minimum_size(Group *g, f32 g_size_px, i32 axis, b8 dir,
                      b8 commmit = false)
 {
   if (g->splits.size > 0 && g->split_axis != axis) {
-    f32 min_size = get_minimum_size(g->splits[0].child, g_size_px, axis, dir);
+    f32 min_size =
+        get_minimum_size(g->splits[0].child.get(), g_size_px, axis, dir);
     for (i32 i = 1; i < g->splits.size; i++) {
-      min_size = fmaxf(
-          min_size, get_minimum_size(g->splits[i].child, g_size_px, axis, dir));
+      min_size = fmaxf(min_size, get_minimum_size(g->splits[i].child.get(),
+                                                  g_size_px, axis, dir));
     }
     return min_size;
   } else if (g->splits.size > 0) {
@@ -286,8 +290,8 @@ f32 get_minimum_size(Group *g, f32 g_size_px, i32 axis, b8 dir,
 
     Split *end_split = &g->splits[dir ? g->splits.size - 1 : 0];
     return non_changing_divs_size_px +
-           get_minimum_size(end_split->child, g_size_px * end_split->div_pct,
-                            axis, dir);
+           get_minimum_size(end_split->child.get(),
+                            g_size_px * end_split->div_pct, axis, dir);
   }
 
   const f32 MINIMUM_GROUP_SIZE[2] = {TITLEBAR_HEIGHT + 15.f, 50.f};
@@ -299,8 +303,8 @@ void resize_border_splits_and_propagate(Group *g, f32 pct_change, i32 axis,
 {
   if (g->split_axis != axis) {
     for (i32 i = 0; i < g->splits.size; i++) {
-      resize_border_splits_and_propagate(g->splits[i].child, pct_change, axis,
-                                         dir);
+      resize_border_splits_and_propagate(g->splits[i].child.get(), pct_change,
+                                         axis, dir);
     }
     return;
   }
@@ -313,7 +317,7 @@ void resize_border_splits_and_propagate(Group *g, f32 pct_change, i32 axis,
     f32 old_value        = g->splits[changing_split_i].div_pct;
     f32 new_value        = 1 - ((1 - old_value) / pct_change);
     // really don't know why this worked
-    resize_border_splits_and_propagate(g->splits[changing_split_i].child,
+    resize_border_splits_and_propagate(g->splits[changing_split_i].child.get(),
                                        pct_change * (new_value / old_value),
                                        axis, dir);
 
@@ -327,8 +331,8 @@ void parent_window(Group *g, DuiId window_id)
 {
   Container *w = &s.containers.wrapped_get(window_id);
 
-  if (w->parent) {
-    Group *old_g = w->parent;
+  if (w->parent != -1) {
+    Group *old_g = w->parent.get();
     old_g->windows.shift_delete(old_g->get_window_idx(w->id));
     if (old_g->active_window_idx >= old_g->windows.size) {
       old_g->active_window_idx--;
@@ -339,7 +343,7 @@ void parent_window(Group *g, DuiId window_id)
     }
   }
 
-  w->parent = g;
+  w->parent = g->id;
 
   g->windows.push_back(window_id);
   g->active_window_idx = g->windows.size - 1;
@@ -348,7 +352,7 @@ void parent_window(Group *g, DuiId window_id)
 Group *unparent_window(DuiId window_id)
 {
   Container *w = get_container(window_id);
-  Group *old_g = w->parent;
+  Group *old_g = w->parent.get();
 
   if (!is_empty(old_g) && old_g->windows.size == 1) return old_g;
 
@@ -373,7 +377,7 @@ Container *create_new_window(DuiId id, String name, Rect rect)
 void merge_splits(Group *g)
 {
   for (i32 i = 0; i < g->splits.size; i++) {
-    Group *child = g->splits[i].child;
+    Group *child = g->splits[i].child.get();
     if (!child->is_leaf() && !is_empty(child) &&
         child->split_axis == g->split_axis) {
       Split split = g->splits[i];
@@ -384,7 +388,7 @@ void merge_splits(Group *g)
         new_split.div_pct *= split.div_pct;
         g->splits.insert(i + child_i, new_split);
 
-        new_split.child->parent = g;
+        new_split.child.get()->parent = g->id;
       }
 
       free_group(child);
@@ -398,13 +402,16 @@ void merge_splits(Group *g)
 b8 snap_group(Group *g, Group *target, i32 axis, b8 dir,
               Group *sibling = nullptr)
 {
+  Vec2f old_size = g->rect.span();
+
   // target must either be a leaf node or be split on the same axis as the
   // sibling
   if (!target->is_leaf() && (sibling && target->split_axis != axis))
     return false;
 
   // try adding it to the parent first
-  if (target->parent && snap_group(g, target->parent, axis, dir, target))
+  if (target->parent != -1 &&
+      snap_group(g, target->parent.get(), axis, dir, target))
     return true;
 
   if (target->is_leaf()) {
@@ -412,18 +419,18 @@ b8 snap_group(Group *g, Group *target, i32 axis, b8 dir,
     Group *new_g             = create_group(target, target->rect);
     new_g->windows           = target->windows;
     new_g->active_window_idx = target->active_window_idx;
-    if (target == s.empty_group) s.empty_group = new_g;
+    if (target->id == s.empty_group) s.empty_group = new_g->id;
 
-    target->windows.clear();
+    target->clear_windows();
     target->split_axis = axis;
 
     Split orig_split;
-    orig_split.child   = new_g;
+    orig_split.child   = new_g->id;
     orig_split.div_pct = .5f;
     target->splits.push_back(orig_split);
 
     Split new_split;
-    new_split.child   = g;
+    new_split.child   = g->id;
     new_split.div_pct = .5f;
     target->splits.insert(dir ? 1 : 0, new_split);
 
@@ -435,19 +442,19 @@ b8 snap_group(Group *g, Group *target, i32 axis, b8 dir,
     new_g->split_axis = target->split_axis;
     new_g->splits     = target->splits;
     for (i32 i = 0; i < new_g->splits.size; i++) {
-      Group *target = new_g->splits[i].child;
+      Group *target = new_g->splits[i].child.get();
     }
-    if (target == s.empty_group) s.empty_group = new_g;
+    if (target->id == s.empty_group) s.empty_group = new_g->id;
 
     target->splits.clear();
 
     Split orig_split;
-    orig_split.child   = new_g;
+    orig_split.child   = new_g->id;
     orig_split.div_pct = .5f;
     target->splits.push_back(orig_split);
 
     Split new_split;
-    new_split.child   = g;
+    new_split.child   = g->id;
     new_split.div_pct = .5f;
     target->splits.insert(dir ? 1 : 0, new_split);
 
@@ -455,7 +462,7 @@ b8 snap_group(Group *g, Group *target, i32 axis, b8 dir,
   } else if (sibling) {  // already split, same axis, in the middle
     i32 sibling_idx = -1;
     for (i32 i = 0; i < target->splits.size; i++) {
-      if (target->splits[i].child == sibling) {
+      if (target->splits[i].child == sibling->id) {
         sibling_idx = i;
         break;
       }
@@ -466,7 +473,7 @@ b8 snap_group(Group *g, Group *target, i32 axis, b8 dir,
     target->splits[sibling_idx].div_pct = half_size;
 
     Split new_split;
-    new_split.child   = g;
+    new_split.child   = g->id;
     new_split.div_pct = half_size;
     target->splits.insert(dir ? sibling_idx + 1 : sibling_idx, new_split);
   } else {  // already split, same axis, at the ends
@@ -477,15 +484,17 @@ b8 snap_group(Group *g, Group *target, i32 axis, b8 dir,
     }
 
     Split new_split;
-    new_split.child   = g;
+    new_split.child   = g->id;
     new_split.div_pct = new_split_pct;
     target->splits.insert(dir ? target->splits.size : 0, new_split);
   }
 
-  if (!g->parent) {
+  g->span_before_snap = old_size;
+
+  if (!g->parent.valid()) {
     remove_root_group(g);
   }
-  g->parent = target;
+  g->parent = target->id;
 
   merge_splits(target);
 
@@ -502,19 +511,19 @@ Group *unsnap_group(Group *g)
     new_g->windows           = g->windows;
     new_g->active_window_idx = g->active_window_idx;
 
-    g->windows.clear();
+    g->clear_windows();
     g->active_window_idx = -1;
     return new_g;
   }
 
-  if (!g->parent) return g;
-  Group *parent_g = g->parent;
+  if (!g->parent.valid()) return g;
+  Group *parent_g = g->parent.get();
 
   DuiId idx;
   f32 free_space;
   for (i32 i = 0; i < parent_g->splits.size; i++) {
     Split split = parent_g->splits[i];
-    if (split.child == g) {
+    if (split.child == g->id) {
       idx        = i;
       free_space = split.div_pct;
       break;
@@ -527,20 +536,24 @@ Group *unsnap_group(Group *g)
   }
 
   if (parent_g->splits.size == 1) {
-    Group *child                = parent_g->splits[0].child;
+    Group *child                = parent_g->splits[0].child.get();
     parent_g->split_axis        = child->split_axis;
     parent_g->splits            = child->splits;
     parent_g->windows           = child->windows;
     parent_g->active_window_idx = child->active_window_idx;
-    if (is_empty(child)) s.empty_group = parent_g;
+    if (is_empty(child)) s.empty_group = parent_g->id;
 
     free_group(child);
 
-    if (parent_g->parent) {
-      merge_splits(parent_g->parent);
+    if (parent_g->parent != -1) {
+      merge_splits(parent_g->parent.get());
     }
   }
 
+  if (g->span_before_snap.x > 0.f && g->span_before_snap.y > 0) {
+    g->rect.width  = g->span_before_snap.x;
+    g->rect.height = g->span_before_snap.y;
+  }
   add_root_group(g);
 
   return g;
@@ -614,7 +627,7 @@ Group *handle_dragging_group(Group *g, DuiId id)
     return false;
   };
 
-  if (s.fullscreen_group == g) return g;
+  if (s.fullscreen_group == g->id) return g;
 
   Group *target_group = get_top_leaf_group_at_pos(s.input->mouse_pos, true);
 
@@ -632,8 +645,8 @@ Group *handle_dragging_group(Group *g, DuiId id)
     Vec2f vertical_button_span          = {fifth_dock_controls_width,
                                            three_fifth_dock_controls_width};
 
-    if (target_group->root != target_group) {
-      Rect root_window_rect = target_group->root->get_window_rect();
+    if (target_group->root != target_group->id) {
+      Rect root_window_rect = target_group->root.get()->get_window_rect();
 
       SUB_ID(left_root_dock_control_id, id);
       SUB_ID(right_root_dock_control_id, id);
@@ -648,17 +661,17 @@ Group *handle_dragging_group(Group *g, DuiId id)
       Rect bottom_root_dock_control_rect =
           snap_in_rect(horizontal_button_span, root_window_rect, 1, 2);
       if (do_snap_control(left_root_dock_control_id, id,
-                          left_root_dock_control_rect, g, target_group->root, 1,
-                          false) ||
+                          left_root_dock_control_rect, g,
+                          target_group->root.get(), 1, false) ||
           do_snap_control(right_root_dock_control_id, id,
-                          right_root_dock_control_rect, g, target_group->root,
-                          1, true) ||
+                          right_root_dock_control_rect, g,
+                          target_group->root.get(), 1, true) ||
           do_snap_control(top_root_dock_control_id, id,
-                          top_root_dock_control_rect, g, target_group->root, 0,
-                          false) ||
+                          top_root_dock_control_rect, g,
+                          target_group->root.get(), 0, false) ||
           do_snap_control(bottom_root_dock_control_id, id,
-                          bottom_root_dock_control_rect, g, target_group->root,
-                          0, true)) {
+                          bottom_root_dock_control_rect, g,
+                          target_group->root.get(), 0, true)) {
         return g;
       }
     }
@@ -739,7 +752,7 @@ void draw_group_and_children(Group *g)
 {
   if (!g->is_leaf()) {
     for (i32 i = 0; i < g->splits.size; i++) {
-      draw_group_and_children(g->splits[i].child);
+      draw_group_and_children(g->splits[i].child.get());
     }
     return;
   }
@@ -749,13 +762,15 @@ void draw_group_and_children(Group *g)
   Rect group_border_rect           = g->get_border_rect();
   Rect window_rect                 = g->get_window_rect();
 
-  push_rect(g->root->dl, titlebar_rect, d);
-  push_rect(g->root->dl, titlebar_bottom_border_rect, d_light);
-  push_rect(g->root->dl, group_border_rect, d);
-  push_rect(g->root->dl, window_rect, d_dark);
+  DrawList *dl = g->root.get()->dl;
+
+  push_rect(dl, titlebar_rect, d);
+  push_rect(dl, titlebar_bottom_border_rect, d_light);
+  push_rect(dl, group_border_rect, d);
+  push_rect(dl, window_rect, d_dark);
 
   if (is_empty(g)) {
-    push_rect(g->root->dl, titlebar_rect, {1, 0, 0, 1});
+    push_rect(dl, titlebar_rect, {1, 0, 0, 1});
   }
 
   f32 combined_extra_desired_tab_space =
@@ -776,9 +791,9 @@ void draw_group_and_children(Group *g)
     if (w_i == g->active_window_idx) {
       tab_color = d_light;
     }
-    push_rect(g->root->dl, tab_rect, tab_color);
+    push_rect(dl, tab_rect, tab_color);
 
-    push_text(g->root->dl, &s.gdld, w->title,
+    push_text(dl, &s.gdld, w->title,
               tab_rect.xy() + Vec2f{TAB_MARGIN, tab_rect.height - TAB_MARGIN},
               {1, 1, 1, 1}, tab_rect.height - 4);
   }
@@ -796,7 +811,7 @@ void start_frame_for_leaf(Group *g)
     Rect tab_rect = g->get_tab_margin_rect(w_i);
 
     SUB_ID(tab_handle_id, window_id);
-    DuiId tab_handle_hot      = do_hot(tab_handle_id, tab_rect, g->root);
+    DuiId tab_handle_hot      = do_hot(tab_handle_id, tab_rect, g->root.get());
     DuiId tab_handle_active   = do_active(tab_handle_id);
     DuiId tab_handle_dragging = do_dragging(tab_handle_id);
     if (tab_handle_active) {
@@ -820,7 +835,7 @@ void start_frame_for_leaf(Group *g)
 
   Rect titlebar_rect = g->get_titlebar_margin_rect();
   SUB_ID(root_handle_id, active_window_id);
-  DuiId root_handle_hot      = do_hot(root_handle_id, titlebar_rect, g->root);
+  DuiId root_handle_hot = do_hot(root_handle_id, titlebar_rect, g->root.get());
   DuiId root_handle_active   = do_active(root_handle_id);
   DuiId root_handle_dragging = do_dragging(root_handle_id);
   if (root_handle_dragging || s.just_stopped_being_dragging == root_handle_id) {
@@ -829,8 +844,8 @@ void start_frame_for_leaf(Group *g)
       g = handle_dragging_group(g, root_handle_id);
     } else {
       Group *root_g = g;
-      while (root_g->parent) {
-        root_g = root_g->parent;
+      while (root_g->parent != -1) {
+        root_g = root_g->parent.get();
       }
       root_g = handle_dragging_group(root_g, root_handle_id);
     }
@@ -841,23 +856,23 @@ void start_frame_for_group(Group *g)
 {
   const f32 RESIZE_HANDLES_OVERSIZE = 2.f;
 
-  s.cg = g;
+  s.cg = g->id;
 
-  if (s.fullscreen_group == g) {
+  if (s.fullscreen_group == g->id) {
     g->rect.x      = 0;
     g->rect.y      = 0;
     g->rect.width  = s.canvas_span.x;
     g->rect.height = s.canvas_span.y;
   }
 
-  if (!g->parent) {
+  if (!g->parent.valid()) {
     // only do movement/resizing logic if window is not fullscreen
-    if (s.fullscreen_group != g) {
+    if (s.fullscreen_group != g->id) {
       // easy keyboard-based window manipulation
       if (s.input->keys[(i32)Keys::LALT]) {
-        SUB_ID(root_controller_control_id, g->id);
+        SUB_ID(root_controller_control_id, g->id.id);
         DuiId root_controller_control_hot =
-            do_hot(root_controller_control_id, g->rect, g->root);
+            do_hot(root_controller_control_id, g->rect, g->root.get());
         DuiId root_controller_control_active =
             do_active(root_controller_control_id);
         DuiId root_controller_control_dragging =
@@ -880,9 +895,9 @@ void start_frame_for_group(Group *g)
             RESIZE_HANDLES_OVERSIZE + WINDOW_BORDER_SIZE + WINDOW_MARGIN_SIZE;
         left_top_handle_rect.height =
             RESIZE_HANDLES_OVERSIZE + WINDOW_BORDER_SIZE + WINDOW_MARGIN_SIZE;
-        SUB_ID(left_top_handle_id, g->id);
+        SUB_ID(left_top_handle_id, g->id.id);
         DuiId left_top_handle_hot =
-            do_hot(left_top_handle_id, left_top_handle_rect, g->root);
+            do_hot(left_top_handle_id, left_top_handle_rect, g->root.get());
         DuiId left_top_handle_active   = do_active(left_top_handle_id);
         DuiId left_top_handle_dragging = do_dragging(left_top_handle_id);
         if (left_top_handle_hot || left_top_handle_dragging) {
@@ -913,9 +928,9 @@ void start_frame_for_group(Group *g)
             RESIZE_HANDLES_OVERSIZE + WINDOW_BORDER_SIZE + WINDOW_MARGIN_SIZE;
         right_top_handle_rect.height =
             RESIZE_HANDLES_OVERSIZE + WINDOW_BORDER_SIZE + WINDOW_MARGIN_SIZE;
-        SUB_ID(right_top_handle_id, g->id);
+        SUB_ID(right_top_handle_id, g->id.id);
         DuiId right_top_handle_hot =
-            do_hot(right_top_handle_id, right_top_handle_rect, g->root);
+            do_hot(right_top_handle_id, right_top_handle_rect, g->root.get());
         DuiId right_top_handle_active   = do_active(right_top_handle_id);
         DuiId right_top_handle_dragging = do_dragging(right_top_handle_id);
         if (right_top_handle_hot || right_top_handle_dragging) {
@@ -943,9 +958,9 @@ void start_frame_for_group(Group *g)
             RESIZE_HANDLES_OVERSIZE + WINDOW_BORDER_SIZE + WINDOW_MARGIN_SIZE;
         left_bottom_handle_rect.height =
             RESIZE_HANDLES_OVERSIZE + WINDOW_BORDER_SIZE + WINDOW_MARGIN_SIZE;
-        SUB_ID(left_bottom_handle_id, g->id);
-        DuiId left_bottom_handle_hot =
-            do_hot(left_bottom_handle_id, left_bottom_handle_rect, g->root);
+        SUB_ID(left_bottom_handle_id, g->id.id);
+        DuiId left_bottom_handle_hot = do_hot(
+            left_bottom_handle_id, left_bottom_handle_rect, g->root.get());
         DuiId left_bottom_handle_active   = do_active(left_bottom_handle_id);
         DuiId left_bottom_handle_dragging = do_dragging(left_bottom_handle_id);
         if (left_bottom_handle_hot || left_bottom_handle_dragging) {
@@ -974,9 +989,9 @@ void start_frame_for_group(Group *g)
             RESIZE_HANDLES_OVERSIZE + WINDOW_BORDER_SIZE + WINDOW_MARGIN_SIZE;
         right_bottom_handle_rect.height =
             RESIZE_HANDLES_OVERSIZE + WINDOW_BORDER_SIZE + WINDOW_MARGIN_SIZE;
-        SUB_ID(right_bottom_handle_id, g->id);
-        DuiId right_bottom_handle_hot =
-            do_hot(right_bottom_handle_id, right_bottom_handle_rect, g->root);
+        SUB_ID(right_bottom_handle_id, g->id.id);
+        DuiId right_bottom_handle_hot = do_hot(
+            right_bottom_handle_id, right_bottom_handle_rect, g->root.get());
         DuiId right_bottom_handle_active = do_active(right_bottom_handle_id);
         DuiId right_bottom_handle_dragging =
             do_dragging(right_bottom_handle_id);
@@ -1000,9 +1015,9 @@ void start_frame_for_group(Group *g)
         left_handle_rect.width =
             RESIZE_HANDLES_OVERSIZE + WINDOW_BORDER_SIZE + WINDOW_MARGIN_SIZE;
         left_handle_rect.height = g->rect.height;
-        SUB_ID(left_handle_id, g->id);
+        SUB_ID(left_handle_id, g->id.id);
         DuiId left_handle_hot =
-            do_hot(left_handle_id, left_handle_rect, g->root);
+            do_hot(left_handle_id, left_handle_rect, g->root.get());
         DuiId left_handle_active   = do_active(left_handle_id);
         DuiId left_handle_dragging = do_dragging(left_handle_id);
         if (left_handle_hot || left_handle_dragging) {
@@ -1024,9 +1039,9 @@ void start_frame_for_group(Group *g)
         right_handle_rect.width =
             RESIZE_HANDLES_OVERSIZE + WINDOW_BORDER_SIZE + WINDOW_MARGIN_SIZE;
         right_handle_rect.height = g->rect.height;
-        SUB_ID(right_handle_id, g->id);
+        SUB_ID(right_handle_id, g->id.id);
         DuiId right_handle_hot =
-            do_hot(right_handle_id, right_handle_rect, g->root);
+            do_hot(right_handle_id, right_handle_rect, g->root.get());
         DuiId right_handle_active   = do_active(right_handle_id);
         DuiId right_handle_dragging = do_dragging(right_handle_id);
         if (right_handle_hot || right_handle_dragging) {
@@ -1045,8 +1060,9 @@ void start_frame_for_group(Group *g)
         top_handle_rect.width = g->rect.width;
         top_handle_rect.height =
             RESIZE_HANDLES_OVERSIZE + WINDOW_BORDER_SIZE + WINDOW_MARGIN_SIZE;
-        SUB_ID(top_handle_id, g->id);
-        DuiId top_handle_hot = do_hot(top_handle_id, top_handle_rect, g->root);
+        SUB_ID(top_handle_id, g->id.id);
+        DuiId top_handle_hot =
+            do_hot(top_handle_id, top_handle_rect, g->root.get());
         DuiId top_handle_active   = do_active(top_handle_id);
         DuiId top_handle_dragging = do_dragging(top_handle_id);
         if (top_handle_hot || top_handle_dragging) {
@@ -1068,9 +1084,9 @@ void start_frame_for_group(Group *g)
         bottom_handle_rect.width = g->rect.width;
         bottom_handle_rect.height =
             RESIZE_HANDLES_OVERSIZE + WINDOW_BORDER_SIZE + WINDOW_MARGIN_SIZE;
-        SUB_ID(bottom_handle_id, g->id);
+        SUB_ID(bottom_handle_id, g->id.id);
         DuiId bottom_handle_hot =
-            do_hot(bottom_handle_id, bottom_handle_rect, g->root);
+            do_hot(bottom_handle_id, bottom_handle_rect, g->root.get());
         DuiId bottom_handle_active   = do_active(bottom_handle_id);
         DuiId bottom_handle_dragging = do_dragging(bottom_handle_id);
         if (bottom_handle_hot || bottom_handle_dragging) {
@@ -1130,30 +1146,31 @@ void start_frame_for_group(Group *g)
           g->splits[i].div_position - WINDOW_BORDER_SIZE - WINDOW_MARGIN_SIZE;
       split_move_handle.width  = g->rect.width;
       split_move_handle.height = 2 * (WINDOW_BORDER_SIZE + WINDOW_MARGIN_SIZE);
-      SUB_ID(split_move_handle_id, g->id + i);
+      SUB_ID(split_move_handle_id, g->id.id + i);
       DuiId split_move_handle_hot =
-          do_hot(split_move_handle_id, split_move_handle, g->root);
+          do_hot(split_move_handle_id, split_move_handle, g->root.get());
       DuiId split_move_handle_active   = do_active(split_move_handle_id);
       DuiId split_move_handle_dragging = do_dragging(split_move_handle_id);
       if (split_move_handle_dragging) {
         f32 delta_px = s.input->mouse_pos.y - split_move_handle.y;
 
         f32 min_px_up =
-            get_minimum_size(g->splits[i - 1].child,
+            get_minimum_size(g->splits[i - 1].child.get(),
                              g->splits[i - 1].div_pct * g->rect.height, 0, 1);
-        f32 min_px_down = get_minimum_size(
-            g->splits[i].child, g->splits[i].div_pct * g->rect.height, 0, 0);
+        f32 min_px_down =
+            get_minimum_size(g->splits[i].child.get(),
+                             g->splits[i].div_pct * g->rect.height, 0, 0);
 
         b8 too_far_up =
-            min_px_up > g->splits[i - 1].child->rect.height + delta_px;
+            min_px_up > g->splits[i - 1].child.get()->rect.height + delta_px;
         b8 too_far_down =
-            min_px_down > g->splits[i].child->rect.height - delta_px;
+            min_px_down > g->splits[i].child.get()->rect.height - delta_px;
         if (too_far_up && too_far_down) {
           break;
         } else if (too_far_up) {
-          delta_px = min_px_up - g->splits[i - 1].child->rect.height;
+          delta_px = min_px_up - g->splits[i - 1].child.get()->rect.height;
         } else if (too_far_down) {
-          delta_px = -(min_px_down - g->splits[i].child->rect.height);
+          delta_px = -(min_px_down - g->splits[i].child.get()->rect.height);
         }
 
         f32 move_pct = delta_px / g->rect.height;
@@ -1163,10 +1180,10 @@ void start_frame_for_group(Group *g)
         f32 down_pct_change =
             (g->splits[i].div_pct - move_pct) / g->splits[i].div_pct;
 
-        resize_border_splits_and_propagate(g->splits[i - 1].child,
+        resize_border_splits_and_propagate(g->splits[i - 1].child.get(),
                                            up_pct_change, 0, 1);
-        resize_border_splits_and_propagate(g->splits[i].child, down_pct_change,
-                                           0, 0);
+        resize_border_splits_and_propagate(g->splits[i].child.get(),
+                                           down_pct_change, 0, 0);
         g->splits[i - 1].div_pct *= up_pct_change;
         g->splits[i].div_pct *= down_pct_change;
       }
@@ -1177,30 +1194,31 @@ void start_frame_for_group(Group *g)
       split_move_handle.y      = g->rect.y;
       split_move_handle.width  = 2 * (WINDOW_BORDER_SIZE + WINDOW_MARGIN_SIZE);
       split_move_handle.height = g->rect.height;
-      SUB_ID(split_move_handle_id, g->id + i);
+      SUB_ID(split_move_handle_id, g->id.id + i);
       DuiId split_move_handle_hot =
-          do_hot(split_move_handle_id, split_move_handle, g->root);
+          do_hot(split_move_handle_id, split_move_handle, g->root.get());
       DuiId split_move_handle_active   = do_active(split_move_handle_id);
       DuiId split_move_handle_dragging = do_dragging(split_move_handle_id);
       if (split_move_handle_dragging) {
         f32 delta_px = s.input->mouse_pos.x - split_move_handle.x;
 
         f32 min_px_left =
-            get_minimum_size(g->splits[i - 1].child,
+            get_minimum_size(g->splits[i - 1].child.get(),
                              g->splits[i - 1].div_pct * g->rect.width, 1, 1);
-        f32 min_px_right = get_minimum_size(
-            g->splits[i].child, g->splits[i].div_pct * g->rect.width, 1, 0);
+        f32 min_px_right =
+            get_minimum_size(g->splits[i].child.get(),
+                             g->splits[i].div_pct * g->rect.width, 1, 0);
 
         b8 too_far_left =
-            min_px_left > g->splits[i - 1].child->rect.width + delta_px;
+            min_px_left > g->splits[i - 1].child.get()->rect.width + delta_px;
         b8 too_far_right =
-            min_px_right > g->splits[i].child->rect.width - delta_px;
+            min_px_right > g->splits[i].child.get()->rect.width - delta_px;
         if (too_far_left && too_far_right) {
           break;
         } else if (too_far_left) {
-          delta_px = min_px_left - g->splits[i - 1].child->rect.width;
+          delta_px = min_px_left - g->splits[i - 1].child.get()->rect.width;
         } else if (too_far_right) {
-          delta_px = -(min_px_right - g->splits[i].child->rect.width);
+          delta_px = -(min_px_right - g->splits[i].child.get()->rect.width);
         }
 
         f32 move_pct = delta_px / g->rect.width;
@@ -1210,20 +1228,20 @@ void start_frame_for_group(Group *g)
         f32 right_pct_change =
             (g->splits[i].div_pct - move_pct) / g->splits[i].div_pct;
 
-        resize_border_splits_and_propagate(g->splits[i - 1].child,
+        resize_border_splits_and_propagate(g->splits[i - 1].child.get(),
                                            left_pct_change, 1, 1);
-        resize_border_splits_and_propagate(g->splits[i].child, right_pct_change,
-                                           1, 0);
+        resize_border_splits_and_propagate(g->splits[i].child.get(),
+                                           right_pct_change, 1, 0);
         g->splits[i - 1].div_pct *= left_pct_change;
         g->splits[i].div_pct *= right_pct_change;
       }
     }
   }
 
-  s.cg = nullptr;
+  s.cg = -1;
 
   for (i32 i = 0; i < g->splits.size; i++) {
-    start_frame_for_group(g->splits[i].child);
+    start_frame_for_group(g->splits[i].child.get());
   }
 }
 
@@ -1250,40 +1268,39 @@ void start_frame(Input *input, Vec2f canvas_size)
   }
 
   // figure out the top groups first
-  s.top_root_group_at_mouse_pos     = nullptr;
+  s.top_root_group_at_mouse_pos     = -1;
   i32 top_root_group_at_mouse_pos_z = -1;
   for (i32 i = 0; i < s.root_groups.size; i++) {
-    if (in_rect(s.input->mouse_pos, s.root_groups[i]->rect)) {
+    if (in_rect(s.input->mouse_pos, s.root_groups[i].get()->rect)) {
       s.top_root_group_at_mouse_pos = s.root_groups[i];
       top_root_group_at_mouse_pos_z = i;
       break;
     }
   }
   if (s.input->mouse_button_down_events[(i32)MouseButton::LEFT]) {
-    if (top_root_group_at_mouse_pos_z > -1) {
-      Group *g = s.root_groups[top_root_group_at_mouse_pos_z];
-      if (g != s.fullscreen_group) {
+    if (top_root_group_at_mouse_pos_z != -1) {
+      Group *g = s.root_groups[top_root_group_at_mouse_pos_z].get();
+      if (g->id != s.fullscreen_group) {
         s.root_groups.shift_delete(top_root_group_at_mouse_pos_z);
-        s.root_groups.insert(0, g);
+        s.root_groups.insert(0, g->id);
       }
     }
   }
 
   // one pass for input handling
   for (i32 i = 0; i < s.root_groups.size; i++) {
-    Group *g = s.root_groups[i];
+    Group *g = s.root_groups[i].get();
     start_frame_for_group(g);
   }
 
   // one pass to propagate changes
   for (i32 i = 0; i < s.root_groups.size; i++) {
-    Group *g = s.root_groups[i];
-    propagate_groups(g);
+    propagate_groups(s.root_groups[i].get());
   }
 
   // one pass for drawing, in reverse z order
   for (i32 i = s.root_groups.size - 1; i >= 0; i--) {
-    Group *g = s.root_groups[i];
+    Group *g = s.root_groups[i].get();
     g->dl    = &s.draw_lists[i];
     draw_group_and_children(g);
   }
@@ -1293,7 +1310,7 @@ DuiId start_window(String name, Rect initial_rect)
 {
   DuiId id = hash(name);
 
-  if (s.cw) {
+  if (s.cw != -1) {
     warning("starting a window without ending another!");
     return id;
   }
@@ -1303,20 +1320,20 @@ DuiId start_window(String name, Rect initial_rect)
                      : create_new_window(id, name, initial_rect);
   w->start_frame(&s, s.input, s.frame);
 
-  s.cw = w;
+  s.cw = w->id;
 
   return id;
 }
 
 void end_window()
 {
-  if (s.cc) {
-    s.cc->parent->root->dl->pop_scissor();
-    s.cc = nullptr;
+  if (s.cc != -1) {
+    get_container(s.cc)->parent.get()->root.get()->dl->pop_scissor();
+    s.cc = -1;
   }
 
   if (s.cw) {
-    s.cw = nullptr;
+    s.cw = -1;
   } else {
     warning("end_window without start_window");
   }
@@ -1417,8 +1434,8 @@ b8 basic_test_control(String text, Vec2f size, Color color, b8 fill = false)
 
   Rect rect = c->place(size, true, fill);
 
-  b8 hot     = do_hot(id, rect, c->parent->root, c, c->content_rect);
-  b8 active  = do_active(id);
+  b8 hot    = do_hot(id, rect, c->parent.get()->root.get(), c, c->content_rect);
+  b8 active = do_active(id);
   b8 clicked = hot && s.just_stopped_being_active == id;
 
   static f32 darkenf     = 0.f;
@@ -1437,11 +1454,12 @@ b8 basic_test_control(String text, Vec2f size, Color color, b8 fill = false)
 
   if (hot) color = darken(color, .1f);
 
-  push_rect(c->parent->root->dl, rect, color);
-  push_rect(c->parent->root->dl, inset(rect, 3.f), darken(color, .2f));
+  push_rect(c->parent.get()->root.get()->dl, rect, color);
+  push_rect(c->parent.get()->root.get()->dl, inset(rect, 3.f),
+            darken(color, .2f));
 
-  push_text_centered(c->parent->root->dl, &s.gdld, text, rect.center(),
-                     {true, true}, {1, 1, 1, 1}, 21);
+  push_text_centered(c->parent.get()->root.get()->dl, &s.gdld, text,
+                     rect.center(), {true, true}, {1, 1, 1, 1}, 21);
 
   return clicked;
 }
@@ -1458,8 +1476,8 @@ void text_input(StaticString<N> *str)
   Rect border_rect = c->place({0, height}, true, true);
   Rect rect        = inset(border_rect, 3.f);
 
-  b8 hot      = do_hot(id, rect, c->parent->root, c, c->content_rect);
-  b8 active   = do_active(id);
+  b8 hot    = do_hot(id, rect, c->parent.get()->root.get(), c, c->content_rect);
+  b8 active = do_active(id);
   b8 dragging = do_dragging(id);
   b8 selected = do_selected(id);
   b8 clicked  = hot && s.just_started_being_active == id;
@@ -1480,7 +1498,8 @@ void text_input(StaticString<N> *str)
   }
 
   f32 cursor_pos =
-      text_pos + get_text_width(s.gdld.font, str->to_str().sub(0, cursor_idx), 1);
+      text_pos +
+      get_text_width(s.gdld.font, str->to_str().sub(0, cursor_idx), 1);
   f32 highlight_start_pos =
       text_pos +
       get_text_width(s.gdld.font, str->to_str().sub(0, highlight_start_idx), 1);
@@ -1593,32 +1612,34 @@ void text_input(StaticString<N> *str)
     highlight_start_idx = clamp(highlight_start_idx, 0, str->size);
   }
 
+  DrawList *dl = c->parent.get()->root.get()->dl;
+
   Color color = l_dark;
   if (selected) color = darken(color, .05f);
 
-  push_rect(c->parent->root->dl, border_rect, color);
-  push_rect(c->parent->root->dl, rect, l_dark);
+  push_rect(dl, border_rect, color);
+  push_rect(dl, rect, l_dark);
 
-  c->parent->root->dl->push_scissor(rect);
+  dl->push_scissor(rect);
 
   if (selected && highlight_start_idx != cursor_idx) {
     Rect highlight_rect = {fminf(highlight_start_pos, cursor_pos), rect.y + 3,
                            fabsf(cursor_pos - highlight_start_pos),
                            rect.height - 6};
-    push_rect(c->parent->root->dl, highlight_rect, highlight);
+    push_rect(dl, highlight_rect, highlight);
   }
 
-  push_text_centered(c->parent->root->dl, &s.gdld, str->to_str(),
+  push_text_centered(dl, &s.gdld, str->to_str(),
                      {text_pos, rect.y + (rect.height / 2)}, {false, true},
                      {1, 1, 1, 1}, 21);
 
   if (selected) {
     Rect cursor_rect = {floorf(cursor_pos), rect.y + 3, 2.f, rect.height - 6};
     push_rect(
-        c->parent->root->dl, cursor_rect,
+        dl, cursor_rect,
         {.01f, .01f, .01f, 1.f - (f32)((i32)(cursor_blink_time * 1.5) % 2)});
   }
-  c->parent->root->dl->pop_scissor();
+  dl->pop_scissor();
 
   if (selected) {
     s.cursor_idx          = cursor_idx;
@@ -1638,12 +1659,14 @@ API void api_init_dui(Device *device, Pipeline pipeline)
     init_draw_list(&s.draw_lists[i], device);
   }
 
-  s.empty_group      = create_group(nullptr, {});
+  s.empty_group      = create_group(nullptr, {})->id;
   s.fullscreen_group = s.empty_group;
+
+  s.debug = rand() % 100000;
 }
 
 API void api_debug_ui_test(Device *device, Pipeline pipeline, Input *input,
-                       Vec2f canvas_size)
+                           Vec2f canvas_size)
 {
   static b8 paused = false;
   if (input->keys[(i32)Keys::LCTRL] && input->key_down_events[(i32)Keys::Q]) {
@@ -1659,8 +1682,6 @@ API void api_debug_ui_test(Device *device, Pipeline pipeline, Input *input,
 
     return;
   }
-
-  info("size: ", canvas_size.x, ", ", canvas_size.y);
 
   start_frame(input, canvas_size);
 
@@ -1722,8 +1743,8 @@ API void api_debug_ui_test(Device *device, Pipeline pipeline, Input *input,
     return w->parent;
   };
 
-  static Group *root   = p(w1);
-  static Group *root_2 = p(w1);
+  // static Group *root   = p(w1);
+  // static Group *root_2 = p(w1);
 
   static i32 count = 0;
   if (input->key_down_events[(i32)Keys::SPACE]) {
@@ -1764,7 +1785,7 @@ API void api_debug_ui_test(Device *device, Pipeline pipeline, Input *input,
   }
 
   for (i32 i = s.root_groups.size - 1; i >= 0; i--) {
-    draw_draw_list(s.root_groups[i]->dl, &s.gdld, device, pipeline,
+    draw_draw_list(s.root_groups[i].get()->dl, &s.gdld, device, pipeline,
                    canvas_size);
   }
   draw_draw_list(&s.main_dl, &s.gdld, device, pipeline, canvas_size);
@@ -1772,6 +1793,30 @@ API void api_debug_ui_test(Device *device, Pipeline pipeline, Input *input,
 }
 
 API DuiState *api_get_dui_state() { return &s; }
+
+API ReloadData api_get_plugin_reload_data()
+{
+  info("api_get_plugin_reload_data: ", s.debug);
+  return {&s};
+}
+API void api_reload_plugin(ReloadData reload_data)
+{
+  {
+    Container *c = &s.containers.wrapped_get(hash("fourth"));
+    Group *g     = c->parent.get();
+    info("before api_get_plugiapi_reload_pluginn_reload_data: ", c->rect.x,
+         ", ", c->rect.y);
+  }
+
+  s = *reload_data.dui_state;
+
+  {
+    Container *c = &s.containers.wrapped_get(hash("fourth"));
+    Group *g     = c->parent.get();
+    info("after api_get_plugiapi_reload_pluginn_reload_data: ", c->rect.x, ", ",
+         c->rect.y);
+  }
+};
 
 }  // namespace Dui
 
