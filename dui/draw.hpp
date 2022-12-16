@@ -9,22 +9,64 @@
 namespace Dui
 {
 
+const u32 CORNERS[] = {
+    0x00000000,
+    0x00010000,
+    0x00020000,
+    0x00030000,
+};
+
+enum struct PrimitiveIds : u32 {
+  RECT         = 1 << 18,
+  ROUNDED_RECT = 2 << 18,
+  BITMAP_GLYPH = 3 << 18,
+};
+
+struct RectPrimitive {
+  Rect rect;
+};
+
+struct RoundedRectPrimitive {
+  Rect dimensions;
+  u32 clip_rect_idx;
+  u32 color;
+  f32 corner_radius;
+  f32 pad;
+};
+
+struct BitmapGlyphPrimitive {
+  Rect dimensions;
+  Vec4f uv_bounds;
+  u32 clip_rect_idx;
+  u32 color;
+  Vec2f pad;
+};
+
+struct Primitives {
+  RectPrimitive clip_rects[1024];
+  RoundedRectPrimitive rounded_rects[1024];
+  BitmapGlyphPrimitive bitmap_glyphs[1024];
+};
+
 struct GlobalDrawListData {
+  u64 frame = 0;
+
   ImageBuffer image;
   VkImageView image_view;
   VkSampler sampler;
   VkDescriptorSet desc_set;
 
-  Font font;
-};
+  Buffer primitive_buffer;
 
-struct Vertex {
-  Vec2f pos;
-  Vec2f uv;
-  Color color;
-  f32 texture_blend_factor;
-  Vec2f rect_corner;
-  Vec2f rect_center;
+  Font font;
+
+  Primitives primitives;
+  i32 clip_rects_count    = 0;
+  i32 rounded_rects_count = 0;
+  i32 bitmap_glyphs_count = 0;
+
+  StaticStack<Rect, 1024> scissors;
+  StaticStack<u32, 1024> scissor_idxs;
 };
 
 struct DrawCall {
@@ -36,45 +78,64 @@ struct DrawCall {
 };
 
 struct DrawList {
-  Vertex *verts        = nullptr;
+  // TODO: we can just have a single index buffer in the gdld
+  u32 *verts     = nullptr;
+  i32 vert_count = 0;
+
   DrawCall *draw_calls = nullptr;
-  i32 vert_count       = 0;
   i32 draw_call_count  = 0;
 
-  StaticStack<Rect, 1024> scissors;
-  void push_scissor(Rect rect) { scissors.push_back(rect); }
-  void pop_scissor() { scissors.pop(); }
-
-  Buffer vb;
+  Buffer index_buffer;
 };
 
-GlobalDrawListData init_draw_system(Device *device, Pipeline pipeline)
+void init_draw_system(GlobalDrawListData *gdld, Device *device,
+                      Pipeline pipeline)
 {
-  GlobalDrawListData gdld;
-
   // TODO: create pipeline here
+  gdld->desc_set = create_descriptor_set(device, pipeline);
 
-  gdld.font =
+  gdld->font =
       load_font("resources/fonts/OpenSans-Regular.ttf", 21, &system_allocator);
+  gdld->image =
+      create_image(device, gdld->font.atlas.width, gdld->font.atlas.height);
+  gdld->image_view = create_image_view(device, gdld->image);
+  gdld->sampler    = create_sampler(device);
+  upload_image(device, gdld->image, gdld->font.atlas);
+  write_sampler(device, gdld->desc_set, gdld->image_view, gdld->sampler, 0);
 
-  gdld.image =
-      create_image(device, gdld.font.atlas.width, gdld.font.atlas.height);
-  gdld.image_view = create_image_view(device, gdld.image);
-  gdld.sampler    = create_sampler(device);
-  upload_image(device, gdld.image, gdld.font.atlas);
+  gdld->primitive_buffer = create_storage_buffer(device, MB);
+  bind_storage_buffer(device, gdld->desc_set, gdld->primitive_buffer, 1);
+}
 
-  gdld.desc_set = create_descriptor_set(device, pipeline);
-  write_sampler(device, gdld.desc_set, gdld.image_view, gdld.sampler);
+void push_scissor(GlobalDrawListData *gdld, Rect rect)
+{
+  gdld->primitives.clip_rects[gdld->clip_rects_count++] = {rect};
+  gdld->scissor_idxs.push_back(gdld->clip_rects_count - 1);
+  gdld->scissors.push_back(rect);
+}
+void pop_scissor(GlobalDrawListData *gdld)
+{
+  gdld->scissor_idxs.pop();
+  gdld->scissors.pop();
+}
 
-  return gdld;
+void draw_system_start_frame(GlobalDrawListData *gdld)
+{
+  gdld->clip_rects_count    = 0;
+  gdld->rounded_rects_count = 0;
+  gdld->bitmap_glyphs_count = 0;
+
+  gdld->scissor_idxs.clear();
+  gdld->scissors.clear();
+
+  push_scissor(gdld, {0, 0, 100000, 100000});
 }
 
 void init_draw_list(DrawList *dl, Device *device)
 {
-  dl->verts      = (Vertex *)malloc(sizeof(Vertex) * 1024 * 1024);
-  dl->draw_calls = (DrawCall *)malloc(sizeof(DrawCall) * 1024 * 1024);
-
-  dl->vb = create_vertex_buffer(device, MB);
+  dl->draw_calls   = (DrawCall *)malloc(sizeof(DrawCall) * 1024 * 1024);
+  dl->verts        = (u32 *)malloc(sizeof(u32) * 1024 * 1024);
+  dl->index_buffer = create_index_buffer(device, MB);
 }
 
 void clear_draw_list(DrawList *dl)
@@ -84,87 +145,125 @@ void clear_draw_list(DrawList *dl)
 }
 
 void draw_draw_list(DrawList *dl, GlobalDrawListData *gdld, Device *device,
-                    Pipeline pipeline, Vec2f canvas_size)
+                    Pipeline pipeline, Vec2f canvas_size, u64 frame)
 {
-  upload_buffer_staged(device, dl->vb, dl->verts,
-                       dl->vert_count * sizeof(Vertex));
+  if (gdld->frame != frame) {
+    gdld->frame = frame;
+
+    upload_buffer_staged(device, gdld->primitive_buffer, &gdld->primitives,
+                         sizeof(gdld->primitives));
+  }
+
   bind_descriptor_set(device, pipeline, gdld->desc_set);
 
+  upload_buffer_staged(device, dl->index_buffer, dl->verts,
+                       dl->vert_count * sizeof(u32));
   push_constant(device, pipeline, &canvas_size, sizeof(Vec2f));
   for (i32 i = 0; i < dl->draw_call_count; i++) {
     DrawCall call = dl->draw_calls[i];
 
-    set_scissor(device, call.scissor);
-    draw_vertex_buffer(device, dl->vb, call.vert_offset, call.tri_count * 3);
+    //   set_scissor(device, call.scissor);
+    draw_indexed(device, dl->index_buffer, call.vert_offset,
+                 call.tri_count * 3);
   }
-}
-
-void push_vert(DrawList *dl, Vec2f pos, Vec2f uv, Color color,
-               Vec2f rect_corner, Vec2f rect_center,
-               f32 texture_blend_factor = 0.f)
-{
-  dl->verts[dl->vert_count++] = {
-      pos, uv, color, texture_blend_factor, rect_corner, rect_center};
 }
 
 void push_draw_call(DrawList *dl, i32 tri_count)
 {
-  Rect current_scissor_rect = (dl->scissors.count == 0)
-                                  ? Rect{0, 0, 10000000, 10000000}
-                                  : dl->scissors.top();
-
-  if (dl->draw_call_count > 0 &&
-      dl->draw_calls[dl->draw_call_count - 1].scissor == current_scissor_rect) {
+  if (dl->draw_call_count > 0) {
     dl->draw_calls[dl->draw_call_count - 1].tri_count += tri_count;
     return;
   }
 
   DrawCall dc = {dl->vert_count - (tri_count * 3), tri_count};
-  dc.scissor  = current_scissor_rect;
-
   dl->draw_calls[dl->draw_call_count] = dc;
   dl->draw_call_count++;
 }
 
-void push_tri(DrawList *dl, Vec2f p0, Vec2f p1, Vec2f p2, Color color)
+u32 push_primitive_rounded_rect(GlobalDrawListData *gdld, Rect rect,
+                                Color color, f32 corner_radius)
 {
-  push_vert(dl, p0, {}, color, {0, 0}, {0, 0});
-  push_vert(dl, p1, {}, color, {0, 0}, {0, 0});
-  push_vert(dl, p2, {}, color, {0, 0}, {0, 0});
+  auto color_to_int = [](Color c) {
+    u32 r = (u32)(c.r * 255) & 0xFF;
+    u32 g = (u32)(c.g * 255) & 0xFF;
+    u32 b = (u32)(c.b * 255) & 0xFF;
+    u32 a = (u32)(c.a * 255) & 0xFF;
+    return (r << 24) | (g << 16) | (b << 8) | (a);
+  };
+  gdld->primitives.rounded_rects[gdld->rounded_rects_count++] = {
+      rect, gdld->scissor_idxs.top(), color_to_int(color), corner_radius};
 
-  push_draw_call(dl, 1);
+  return gdld->rounded_rects_count - 1;
 }
 
-void push_quad(DrawList *dl, Vec2f p0, Vec2f p1, Vec2f p2, Vec2f p3,
-               Color color)
+void push_rounded_rect(DrawList *dl, GlobalDrawListData *gdld, Rect rect,
+                       f32 corner_radius, Color color)
 {
-  push_vert(dl, p0, {}, color, {0, 0}, {0, 0});
-  push_vert(dl, p2, {}, color, {0, 0}, {0, 0});
-  push_vert(dl, p1, {}, color, {0, 0}, {0, 0});
+  auto push_rect_vert = [](DrawList *dl, u32 primitive_index, u8 corner) {
+    dl->verts[dl->vert_count++] = {(u32)PrimitiveIds::ROUNDED_RECT |
+                                   CORNERS[corner] | primitive_index};
+  };
 
-  push_vert(dl, p0, {}, color, {0, 0}, {0, 0});
-  push_vert(dl, p3, {}, color, {0, 0}, {0, 0});
-  push_vert(dl, p2, {}, color, {0, 0}, {0, 0});
+  if (!overlaps(rect, gdld->scissors.top())) {
+    return;
+  }
+
+  u32 primitive_idx =
+      push_primitive_rounded_rect(gdld, rect, color, corner_radius);
+
+  push_rect_vert(dl, primitive_idx, 0);
+  push_rect_vert(dl, primitive_idx, 1);
+  push_rect_vert(dl, primitive_idx, 2);
+  push_rect_vert(dl, primitive_idx, 1);
+  push_rect_vert(dl, primitive_idx, 3);
+  push_rect_vert(dl, primitive_idx, 2);
 
   push_draw_call(dl, 2);
 }
 
-void push_rect(DrawList *dl, Rect rect, Color color)
+u32 push_primitive_bitmap_glyph(GlobalDrawListData *gdld, Rect rect,
+                                Vec4f uv_bounds, Color color)
 {
-  Vec2f corner = rect.span() / Vec2f(2.f, 2.f);
-  Vec2f center = rect.center();
+  auto color_to_int = [](Color c) {
+    u32 r = (u32)(c.r * 255) & 0xFF;
+    u32 g = (u32)(c.g * 255) & 0xFF;
+    u32 b = (u32)(c.b * 255) & 0xFF;
+    u32 a = (u32)(c.a * 255) & 0xFF;
+    return (r << 24) | (g << 16) | (b << 8) | (a);
+  };
+  gdld->primitives.bitmap_glyphs[gdld->bitmap_glyphs_count++] = {
+      rect, uv_bounds, gdld->scissor_idxs.top(), color_to_int(color)};
 
-  push_vert(dl, {rect.x, rect.y}, {}, color, corner, center);
-  push_vert(dl, {rect.x + rect.width, rect.y}, {}, color, corner, center);
-  push_vert(dl, {rect.x + rect.width, rect.y + rect.height}, {}, color, corner,
-            center);
+  return gdld->bitmap_glyphs_count - 1;
+}
 
-  push_vert(dl, {rect.x, rect.y}, {}, color, corner, center);
-  push_vert(dl, {rect.x + rect.width, rect.y + rect.height}, {}, color, corner,
-            center);
-  push_vert(dl, {rect.x, rect.y + rect.height}, {}, color, corner, center);
+void push_bitmap_glyph(DrawList *dl, GlobalDrawListData *gdld, Rect rect,
+                       Vec4f uv_bounds, Color color)
+{
+  auto push_glyph_vert = [](DrawList *dl, u32 primitive_index, u8 corner) {
+    dl->verts[dl->vert_count++] = {(u32)PrimitiveIds::BITMAP_GLYPH |
+                                   CORNERS[corner] | primitive_index};
+  };
+
+  if (!overlaps(rect, gdld->scissors.top())) {
+    return;
+  }
+
+  u32 primitive_idx = push_primitive_bitmap_glyph(gdld, rect, uv_bounds, color);
+
+  push_glyph_vert(dl, primitive_idx, 0);
+  push_glyph_vert(dl, primitive_idx, 1);
+  push_glyph_vert(dl, primitive_idx, 2);
+  push_glyph_vert(dl, primitive_idx, 1);
+  push_glyph_vert(dl, primitive_idx, 3);
+  push_glyph_vert(dl, primitive_idx, 2);
 
   push_draw_call(dl, 2);
+}
+
+void push_rect(DrawList *dl, GlobalDrawListData *gdld, Rect rect, Color color)
+{
+  push_rounded_rect(dl, gdld, rect, 0, color);
 }
 
 void push_text(DrawList *dl, GlobalDrawListData *gdld, String text, Vec2f pos,
@@ -182,23 +281,9 @@ void push_text(DrawList *dl, GlobalDrawListData *gdld, String text, Vec2f pos,
     shape_rect.x = floorf(shape_rect.x);
     shape_rect.y = floorf(shape_rect.y);
 
-    push_vert(dl, {shape_rect.x, shape_rect.y}, {c.uv.x, c.uv.y + c.uv.height},
-              color, {0, 0}, {0, 0}, color.a);
-    push_vert(dl, {shape_rect.x + shape_rect.width, shape_rect.y},
-              {c.uv.x + c.uv.width, c.uv.y + c.uv.height}, color, {0, 0},
-              {0, 0}, color.a);
-    push_vert(
-        dl, {shape_rect.x + shape_rect.width, shape_rect.y + shape_rect.height},
-        {c.uv.x + c.uv.width, c.uv.y}, color, {0, 0}, {0, 0}, color.a);
-
-    push_vert(dl, {shape_rect.x, shape_rect.y}, {c.uv.x, c.uv.y + c.uv.height},
-              color, {0, 0}, {0, 0}, color.a);
-    push_vert(
-        dl, {shape_rect.x + shape_rect.width, shape_rect.y + shape_rect.height},
-        {c.uv.x + c.uv.width, c.uv.y}, color, {0, 0}, {0, 0}, color.a);
-    push_vert(dl, {shape_rect.x, shape_rect.y + shape_rect.height},
-              {c.uv.x, c.uv.y}, color, {0, 0}, {0, 0}, color.a);
-    push_draw_call(dl, 2);
+    Vec4f uv_bounds = {c.uv.x, c.uv.y + c.uv.height, c.uv.x + c.uv.width,
+                       c.uv.y};
+    push_bitmap_glyph(dl, gdld, shape_rect, uv_bounds, color);
   }
 };
 

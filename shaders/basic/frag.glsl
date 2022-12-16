@@ -23,9 +23,7 @@ void main() {
     out_color = vec4(in_color.rgb, mix(in_color.a, texture(tex_sampler, in_uv).r, in_texture_blend_factor));
     
     float dist = distance_from_rect(in_position, rect_center, in_corner, 3);
-    float color = 1 - smoothstep(-1, 0, dist);
+    float color = 1 - smoothstep(-1, 0, dist / 2);
     out_color.a = color * out_color.a;
 
-
-    //if (dist < 0) out_color.r = -dist / 1000;
 }

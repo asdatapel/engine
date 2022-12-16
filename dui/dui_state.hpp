@@ -35,6 +35,7 @@ struct DuiState {
 
   Vec2f dragging_total_delta;
   Vec2f dragging_frame_delta;
+  Vec2f dragging_start_local_position;
 
   i64 frame                           = 0;
   GroupId top_root_group_at_mouse_pos = -1;

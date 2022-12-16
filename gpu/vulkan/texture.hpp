@@ -168,7 +168,8 @@ void upload_image(Device *device, ImageBuffer image_buf, Image image)
   vkQueueSubmit(device->graphics_queue, 1, &submit_info, VK_NULL_HANDLE);
   vkQueueWaitIdle(device->graphics_queue);
 
-  vkFreeCommandBuffers(device->device, device->command_pool, 1, &temp_command_buffer);
+  vkFreeCommandBuffers(device->device, device->command_pool, 1,
+                       &temp_command_buffer);
 
   destroy_buffer(device, staging_buffer);
 }
@@ -219,7 +220,7 @@ VkSampler create_sampler(Device *device)
 }
 
 void write_sampler(Device *device, VkDescriptorSet descriptor_set,
-                   VkImageView image_view, VkSampler sampler)
+                   VkImageView image_view, VkSampler sampler, u32 binding)
 {
   VkDescriptorImageInfo image_info{};
   image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -229,7 +230,7 @@ void write_sampler(Device *device, VkDescriptorSet descriptor_set,
   VkWriteDescriptorSet descriptor_write{};
   descriptor_write.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
   descriptor_write.dstSet          = descriptor_set;
-  descriptor_write.dstBinding      = 0;
+  descriptor_write.dstBinding      = binding;
   descriptor_write.dstArrayElement = 0;
   descriptor_write.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
   descriptor_write.descriptorCount = 1;

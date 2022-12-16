@@ -130,6 +130,28 @@ Buffer create_vertex_buffer(Device *device, u32 size)
   return vertex_buffer;
 };
 
+Buffer create_index_buffer(Device *device, u32 size)
+{
+  Buffer buffer = create_buffer(
+      device, size,
+      VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+  buffers.push_back(buffer);
+
+  return buffer;
+};
+
+Buffer create_storage_buffer(Device *device, u32 size)
+{
+  Buffer buffer = create_buffer(
+      device, size,
+      VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+  buffers.push_back(buffer);
+
+  return buffer;
+};
+
 void draw_vertex_buffer(Device *device, Buffer b, u32 offset, u32 vert_count)
 {
   VkBuffer vertex_buffers[] = {b.ref};
@@ -137,4 +159,14 @@ void draw_vertex_buffer(Device *device, Buffer b, u32 offset, u32 vert_count)
   vkCmdBindVertexBuffers(device->command_buffer, 0, 1, vertex_buffers, offsets);
 
   vkCmdDraw(device->command_buffer, vert_count, 1, offset, 0);
+};
+
+void draw_indexed(Device *device, Buffer index_buffer, u32 offset,
+                  u32 vert_count)
+{
+  vkCmdBindVertexBuffers(device->command_buffer, 0, 0, nullptr, nullptr);
+  vkCmdBindIndexBuffer(device->command_buffer, index_buffer.ref, 0,
+                       VK_INDEX_TYPE_UINT32);
+
+  vkCmdDrawIndexed(device->command_buffer, vert_count, 1, offset, 0, 0);
 };

@@ -9,7 +9,7 @@ namespace Dui
 {
 
 const f32 SCROLLBAR_BORDER = 2.f;
-const f32 SCROLLBAR_SIZE = 6.f;
+const f32 SCROLLBAR_SIZE = 8.f;
 
 struct Container {
   DuiId id;
@@ -42,11 +42,18 @@ struct Container {
   {
     Rect rect = inset(this->rect, WINDOW_MARGIN_SIZE);
 
+    b8 shrunk_height = false;
     if (last_frame_minimum_content_span.x > rect.width) {
       rect.height -= SCROLLBAR_SIZE;
+      shrunk_height = true;
     }
     if (last_frame_minimum_content_span.y > rect.height) {
       rect.width -= SCROLLBAR_SIZE;
+
+      // do this again because it might be true now 
+      if (!shrunk_height && last_frame_minimum_content_span.x > rect.width) {
+        rect.height -= SCROLLBAR_SIZE;
+      }
     }
 
     return rect;

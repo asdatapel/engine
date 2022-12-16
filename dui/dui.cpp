@@ -603,9 +603,9 @@ Group *handle_dragging_group(Group *g, DuiId id)
                             b8 dir) -> b8 {
     DuiId hot = do_hot(control_id, rect);
     if (hot)
-      push_rect(&s.forground_dl, rect, l_dark);
+      push_rect(&s.forground_dl, &s.gdld, rect, l_dark);
     else
-      push_rect(&s.forground_dl, rect, l);
+      push_rect(&s.forground_dl, &s.gdld, rect, l);
 
     if (hot) {
       Rect preview_rect = target_group->rect;
@@ -617,7 +617,8 @@ Group *handle_dragging_group(Group *g, DuiId id)
         if (dir) preview_rect.x += preview_rect.width;
       }
 
-      push_rect(&s.forground_dl, preview_rect, {1, 1, 1, .5});  // preview
+      push_rect(&s.forground_dl, &s.gdld, preview_rect,
+                {1, 1, 1, .5});  // preview
       if (s.just_stopped_being_dragging == dragging_id) {
         snap_group(g, target_group, axis, dir);
         return true;
@@ -728,7 +729,8 @@ Group *handle_dragging_group(Group *g, DuiId id)
 
     if (g->is_leaf() &&
         in_rect(s.input->mouse_pos, target_group->get_titlebar_full_rect())) {
-      push_rect(&s.forground_dl, window_rect, {1, 1, 1, .5});  // preview
+      push_rect(&s.forground_dl, &s.gdld, window_rect,
+                {1, 1, 1, .5});  // preview
       if (s.just_stopped_being_dragging == id) {
         combine_leaf_groups(target_group, g);
 
@@ -764,13 +766,13 @@ void draw_group_and_children(Group *g)
 
   DrawList *dl = g->root.get()->dl;
 
-  push_rect(dl, titlebar_rect, d);
-  push_rect(dl, titlebar_bottom_border_rect, d_light);
-  push_rect(dl, group_border_rect, d);
-  push_rect(dl, window_rect, d_dark);
+  push_rect(dl, &s.gdld, titlebar_rect, d);
+  push_rect(dl, &s.gdld, titlebar_bottom_border_rect, d_light);
+  push_rect(dl, &s.gdld, group_border_rect, d);
+  push_rect(dl, &s.gdld, window_rect, d_dark);
 
   if (is_empty(g)) {
-    push_rect(dl, titlebar_rect, {1, 0, 0, 1});
+    push_rect(dl, &s.gdld, titlebar_rect, {1, 0, 0, 1});
   }
 
   f32 combined_extra_desired_tab_space =
@@ -791,11 +793,11 @@ void draw_group_and_children(Group *g)
     if (w_i == g->active_window_idx) {
       tab_color = d_light;
     }
-    push_rect(dl, tab_rect, tab_color);
+    push_rect(dl, &s.gdld, tab_rect, tab_color);
 
     push_text(dl, &s.gdld, w->title,
-              tab_rect.xy() + Vec2f{TAB_MARGIN, tab_rect.height - TAB_MARGIN},
-              {1, 1, 1, 1}, tab_rect.height - 4);
+              tab_rect.xy() + Vec2f{TAB_MARGIN, tab_rect.height -
+              TAB_MARGIN}, {1, 1, 1, 1}, tab_rect.height - 4);
   }
 }
 
@@ -901,7 +903,8 @@ void start_frame_for_group(Group *g)
         DuiId left_top_handle_active   = do_active(left_top_handle_id);
         DuiId left_top_handle_dragging = do_dragging(left_top_handle_id);
         if (left_top_handle_hot || left_top_handle_dragging) {
-          push_rect(&s.forground_dl, left_top_handle_rect, {1, 1, 1, 1});
+          push_rect(&s.forground_dl, &s.gdld, left_top_handle_rect,
+                    {1, 1, 1, 1});
         }
         if (left_top_handle_dragging) {
           g->rect.x += s.dragging_frame_delta.x;
@@ -934,7 +937,8 @@ void start_frame_for_group(Group *g)
         DuiId right_top_handle_active   = do_active(right_top_handle_id);
         DuiId right_top_handle_dragging = do_dragging(right_top_handle_id);
         if (right_top_handle_hot || right_top_handle_dragging) {
-          push_rect(&s.forground_dl, right_top_handle_rect, {1, 1, 1, 1});
+          push_rect(&s.forground_dl, &s.gdld, right_top_handle_rect,
+                    {1, 1, 1, 1});
         }
         if (right_top_handle_dragging) {
           g->rect.width += s.dragging_frame_delta.x;
@@ -964,7 +968,8 @@ void start_frame_for_group(Group *g)
         DuiId left_bottom_handle_active   = do_active(left_bottom_handle_id);
         DuiId left_bottom_handle_dragging = do_dragging(left_bottom_handle_id);
         if (left_bottom_handle_hot || left_bottom_handle_dragging) {
-          push_rect(&s.forground_dl, left_bottom_handle_rect, {1, 1, 1, 1});
+          push_rect(&s.forground_dl, &s.gdld, left_bottom_handle_rect,
+                    {1, 1, 1, 1});
         }
         if (left_bottom_handle_dragging) {
           g->rect.x += s.dragging_frame_delta.x;
@@ -996,7 +1001,8 @@ void start_frame_for_group(Group *g)
         DuiId right_bottom_handle_dragging =
             do_dragging(right_bottom_handle_id);
         if (right_bottom_handle_hot || right_bottom_handle_dragging) {
-          push_rect(&s.forground_dl, right_bottom_handle_rect, {1, 1, 1, 1});
+          push_rect(&s.forground_dl, &s.gdld, right_bottom_handle_rect,
+                    {1, 1, 1, 1});
         }
         if (right_bottom_handle_dragging) {
           g->rect.width += s.dragging_frame_delta.x;
@@ -1021,7 +1027,7 @@ void start_frame_for_group(Group *g)
         DuiId left_handle_active   = do_active(left_handle_id);
         DuiId left_handle_dragging = do_dragging(left_handle_id);
         if (left_handle_hot || left_handle_dragging) {
-          push_rect(&s.forground_dl, left_handle_rect, {1, 1, 1, 1});
+          push_rect(&s.forground_dl, &s.gdld, left_handle_rect, {1, 1, 1, 1});
         }
         if (left_handle_dragging) {
           g->rect.x += s.dragging_frame_delta.x;
@@ -1045,7 +1051,7 @@ void start_frame_for_group(Group *g)
         DuiId right_handle_active   = do_active(right_handle_id);
         DuiId right_handle_dragging = do_dragging(right_handle_id);
         if (right_handle_hot || right_handle_dragging) {
-          push_rect(&s.forground_dl, right_handle_rect, {1, 1, 1, 1});
+          push_rect(&s.forground_dl, &s.gdld, right_handle_rect, {1, 1, 1, 1});
         }
         if (right_handle_dragging) {
           g->rect.width += s.dragging_frame_delta.x;
@@ -1066,7 +1072,7 @@ void start_frame_for_group(Group *g)
         DuiId top_handle_active   = do_active(top_handle_id);
         DuiId top_handle_dragging = do_dragging(top_handle_id);
         if (top_handle_hot || top_handle_dragging) {
-          push_rect(&s.forground_dl, top_handle_rect, {1, 1, 1, 1});
+          push_rect(&s.forground_dl, &s.gdld, top_handle_rect, {1, 1, 1, 1});
         }
         if (top_handle_dragging) {
           g->rect.y += s.dragging_frame_delta.y;
@@ -1090,7 +1096,7 @@ void start_frame_for_group(Group *g)
         DuiId bottom_handle_active   = do_active(bottom_handle_id);
         DuiId bottom_handle_dragging = do_dragging(bottom_handle_id);
         if (bottom_handle_hot || bottom_handle_dragging) {
-          push_rect(&s.forground_dl, bottom_handle_rect, {1, 1, 1, 1});
+          push_rect(&s.forground_dl, &s.gdld, bottom_handle_rect, {1, 1, 1, 1});
         }
         if (bottom_handle_dragging) {
           g->rect.height += s.dragging_frame_delta.y;
@@ -1261,6 +1267,7 @@ void start_frame(Input *input, Vec2f canvas_size)
   s.just_started_being_selected = -1;
   s.just_stopped_being_selected = -1;
 
+  draw_system_start_frame(&s.gdld);
   clear_draw_list(&s.forground_dl);
   clear_draw_list(&s.main_dl);
   for (i32 i = 0; i < s.draw_lists.size; i++) {
@@ -1328,7 +1335,7 @@ DuiId start_window(String name, Rect initial_rect)
 void end_window()
 {
   if (s.cc != -1) {
-    get_container(s.cc)->parent.get()->root.get()->dl->pop_scissor();
+    pop_scissor(&s.gdld);
     s.cc = -1;
   }
 
@@ -1454,9 +1461,9 @@ b8 basic_test_control(String text, Vec2f size, Color color, b8 fill = false)
 
   if (hot) color = darken(color, .1f);
 
-  push_rect(c->parent.get()->root.get()->dl, rect, color);
-  push_rect(c->parent.get()->root.get()->dl, inset(rect, 3.f),
-            darken(color, .2f));
+  push_rounded_rect(c->parent.get()->root.get()->dl, &s.gdld, rect, 15.f, color);
+  push_rounded_rect(c->parent.get()->root.get()->dl, &s.gdld, inset(rect, 1.5f),
+                    15.f, darken(color, .2f));
 
   push_text_centered(c->parent.get()->root.get()->dl, &s.gdld, text,
                      rect.center(), {true, true}, {1, 1, 1, 1}, 21);
@@ -1617,16 +1624,16 @@ void text_input(StaticString<N> *str)
   Color color = l_dark;
   if (selected) color = darken(color, .05f);
 
-  push_rect(dl, border_rect, color);
-  push_rect(dl, rect, l_dark);
+  push_rect(dl, &s.gdld, border_rect, color);
+  push_rect(dl, &s.gdld, rect, l_dark);
 
-  dl->push_scissor(rect);
+  push_scissor(&s.gdld, rect);
 
   if (selected && highlight_start_idx != cursor_idx) {
     Rect highlight_rect = {fminf(highlight_start_pos, cursor_pos), rect.y + 3,
                            fabsf(cursor_pos - highlight_start_pos),
                            rect.height - 6};
-    push_rect(dl, highlight_rect, highlight);
+    push_rect(dl, &s.gdld, highlight_rect, highlight);
   }
 
   push_text_centered(dl, &s.gdld, str->to_str(),
@@ -1636,10 +1643,10 @@ void text_input(StaticString<N> *str)
   if (selected) {
     Rect cursor_rect = {floorf(cursor_pos), rect.y + 3, 2.f, rect.height - 6};
     push_rect(
-        dl, cursor_rect,
+        dl, &s.gdld, cursor_rect,
         {.01f, .01f, .01f, 1.f - (f32)((i32)(cursor_blink_time * 1.5) % 2)});
   }
-  dl->pop_scissor();
+  pop_scissor(&s.gdld);
 
   if (selected) {
     s.cursor_idx          = cursor_idx;
@@ -1650,7 +1657,7 @@ void text_input(StaticString<N> *str)
 
 API void api_init_dui(Device *device, Pipeline pipeline)
 {
-  s.gdld = init_draw_system(device, pipeline);
+  init_draw_system(&s.gdld, device, pipeline);
 
   init_draw_list(&s.main_dl, device);
   init_draw_list(&s.forground_dl, device);
@@ -1674,10 +1681,12 @@ API void api_debug_ui_test(Device *device, Pipeline pipeline, Input *input,
   }
 
   if (paused) {
-    draw_draw_list(&s.main_dl, &s.gdld, device, pipeline, canvas_size);
-    draw_draw_list(&s.forground_dl, &s.gdld, device, pipeline, canvas_size);
+    draw_draw_list(&s.main_dl, &s.gdld, device, pipeline, canvas_size, s.frame);
+    draw_draw_list(&s.forground_dl, &s.gdld, device, pipeline, canvas_size,
+                   s.frame);
     for (i32 i = 0; i < s.draw_lists.size; i++) {
-      draw_draw_list(&s.draw_lists[i], &s.gdld, device, pipeline, canvas_size);
+      draw_draw_list(&s.draw_lists[i], &s.gdld, device, pipeline, canvas_size,
+                     s.frame);
     }
 
     return;
@@ -1786,10 +1795,11 @@ API void api_debug_ui_test(Device *device, Pipeline pipeline, Input *input,
 
   for (i32 i = s.root_groups.size - 1; i >= 0; i--) {
     draw_draw_list(s.root_groups[i].get()->dl, &s.gdld, device, pipeline,
-                   canvas_size);
+                   canvas_size, s.frame);
   }
-  draw_draw_list(&s.main_dl, &s.gdld, device, pipeline, canvas_size);
-  draw_draw_list(&s.forground_dl, &s.gdld, device, pipeline, canvas_size);
+  draw_draw_list(&s.main_dl, &s.gdld, device, pipeline, canvas_size, s.frame);
+  draw_draw_list(&s.forground_dl, &s.gdld, device, pipeline, canvas_size,
+                 s.frame);
 }
 
 API DuiState *api_get_dui_state() { return &s; }

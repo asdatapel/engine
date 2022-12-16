@@ -58,8 +58,8 @@ VertexDescriptions get_vertex_descriptions()
   vertex_descriptions.vertex_attribute_descriptions[5].location = 5;
   vertex_descriptions.vertex_attribute_descriptions[5].format =
       VK_FORMAT_R32G32_SFLOAT;
-  vertex_descriptions.vertex_attribute_descriptions[5].offset = 11 * sizeof(f32);
-
+  vertex_descriptions.vertex_attribute_descriptions[5].offset =
+      11 * sizeof(f32);
 
   return vertex_descriptions;
 }
@@ -203,10 +203,19 @@ Pipeline create_pipeline(Device *device, VkRenderPass render_pass)
     sampler_layout_binding.pImmutableSamplers = nullptr;
     sampler_layout_binding.stageFlags         = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-    VkDescriptorSetLayoutBinding bindings[] = {sampler_layout_binding};
+    VkDescriptorSetLayoutBinding buffer_layout_binding{};
+    buffer_layout_binding.binding         = 1;
+    buffer_layout_binding.descriptorCount = 1;
+    buffer_layout_binding.descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    buffer_layout_binding.pImmutableSamplers = nullptr;
+    buffer_layout_binding.stageFlags =
+        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    VkDescriptorSetLayoutBinding bindings[] = {sampler_layout_binding,
+                                               buffer_layout_binding};
     VkDescriptorSetLayoutCreateInfo layout_info{};
     layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layout_info.bindingCount = 1;
+    layout_info.bindingCount = 2;
     layout_info.pBindings    = bindings;
 
     VkDescriptorSetLayout descriptor_set_layout;
@@ -231,8 +240,8 @@ Pipeline create_pipeline(Device *device, VkRenderPass render_pass)
   }
 
   Temp tmp;
-  File vert_shader_file = read_file("shaders/basic/vert.spv", &tmp);
-  File frag_shader_file = read_file("shaders/basic/frag.spv", &tmp);
+  File vert_shader_file = read_file("shaders/dui/vert.spv", &tmp);
+  File frag_shader_file = read_file("shaders/dui/frag.spv", &tmp);
 
   VkShaderModule vert_shader_module =
       create_shader_module(device->device, vert_shader_file);
@@ -277,8 +286,9 @@ Pipeline create_pipeline(Device *device, VkRenderPass render_pass)
   pipeline_info.basePipelineHandle = VK_NULL_HANDLE;  // Optional
   pipeline_info.basePipelineIndex  = -1;              // Optional
 
-  if (vkCreateGraphicsPipelines(device->device, VK_NULL_HANDLE, 1, &pipeline_info,
-                                nullptr, &pipeline.ref) != VK_SUCCESS) {
+  if (vkCreateGraphicsPipelines(device->device, VK_NULL_HANDLE, 1,
+                                &pipeline_info, nullptr,
+                                &pipeline.ref) != VK_SUCCESS) {
     fatal("failed to create graphics pipeline!");
   }
 
@@ -414,17 +424,20 @@ void end_frame(Device *device)
   present_info.pImageIndices  = &device->current_image_index;
   present_info.pResults       = nullptr;  // Optional
 
-  VkResult present_result = vkQueuePresentKHR(device->graphics_queue, &present_info);
+  VkResult present_result =
+      vkQueuePresentKHR(device->graphics_queue, &present_info);
   if (present_result == VK_ERROR_OUT_OF_DATE_KHR ||
       present_result == VK_SUBOPTIMAL_KHR) {
     recreate_swap_chain(device);
   }
 }
 
-void bind_descriptor_set(Device *device, Pipeline pipeline, VkDescriptorSet descriptor_set)
+void bind_descriptor_set(Device *device, Pipeline pipeline,
+                         VkDescriptorSet descriptor_set)
 {
-  vkCmdBindDescriptorSets(device->command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          pipeline.layout, 0, 1, &descriptor_set, 0, nullptr);
+  vkCmdBindDescriptorSets(device->command_buffer,
+                          VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.layout, 0,
+                          1, &descriptor_set, 0, nullptr);
 }
 
 void push_constant(Device *device, Pipeline pipeline, void *data, u32 size)
@@ -439,4 +452,24 @@ void set_scissor(Device *device, Rect rect)
   scissor.offset = {(i32)rect.x, (i32)rect.y};
   scissor.extent = {(u32)rect.width, (u32)rect.height};
   vkCmdSetScissor(device->command_buffer, 0, 1, &scissor);
+}
+
+void bind_storage_buffer(Device *device, VkDescriptorSet descriptor_set,
+                         Buffer buffer, u32 binding)
+{
+  VkDescriptorBufferInfo buffer_info{};
+  buffer_info.buffer = buffer.ref;
+  buffer_info.offset = 0;
+  buffer_info.range  = MB;
+
+  VkWriteDescriptorSet descriptor_write{};
+  descriptor_write.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  descriptor_write.dstSet          = descriptor_set;
+  descriptor_write.dstBinding      = binding;
+  descriptor_write.dstArrayElement = 0;
+  descriptor_write.descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+  descriptor_write.descriptorCount = 1;
+  descriptor_write.pBufferInfo     = &buffer_info;
+
+  vkUpdateDescriptorSets(device->device, 1, &descriptor_write, 0, nullptr);
 }

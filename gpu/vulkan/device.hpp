@@ -142,6 +142,9 @@ Device init_device(Platform::VulkanExtensions vulkan_extensions,
   }
 
   {
+    VkDescriptorPoolSize storage_buffer_pool_size{};
+    storage_buffer_pool_size.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    storage_buffer_pool_size.descriptorCount = 1000;
     VkDescriptorPoolSize uniforms_pool_size{};
     uniforms_pool_size.type            = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     uniforms_pool_size.descriptorCount = 1000;
@@ -149,12 +152,13 @@ Device init_device(Platform::VulkanExtensions vulkan_extensions,
     uniforms_pool_size.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     uniforms_pool_size.descriptorCount = 1000;
 
-    VkDescriptorPoolSize pool_sizes[] = {uniforms_pool_size,
+    VkDescriptorPoolSize pool_sizes[] = {storage_buffer_pool_size,
+                                         uniforms_pool_size,
                                          combined_sampler_pool_size};
 
     VkDescriptorPoolCreateInfo pool_info{};
     pool_info.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    pool_info.poolSizeCount = 2;
+    pool_info.poolSizeCount = 3;
     pool_info.pPoolSizes    = pool_sizes;
     pool_info.maxSets       = 1000;
 
