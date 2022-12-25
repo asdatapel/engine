@@ -195,9 +195,18 @@ Pipeline create_pipeline(Device *device, VkRenderPass render_pass)
   push_constant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
   {
+    Array<VkDescriptorBindingFlags, 1> binding_flags = {
+        VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT};
+    VkDescriptorSetLayoutBindingFlagsCreateInfoEXT extended_info{};
+    extended_info.sType =
+        VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT;
+    extended_info.pNext         = nullptr;
+    extended_info.bindingCount  = binding_flags.size;
+    extended_info.pBindingFlags = binding_flags.data;
+
     VkDescriptorSetLayoutBinding sampler_layout_binding{};
     sampler_layout_binding.binding         = 0;
-    sampler_layout_binding.descriptorCount = 1;
+    sampler_layout_binding.descriptorCount = 1000;
     sampler_layout_binding.descriptorType =
         VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     sampler_layout_binding.pImmutableSamplers = nullptr;
@@ -215,8 +224,11 @@ Pipeline create_pipeline(Device *device, VkRenderPass render_pass)
                                                buffer_layout_binding};
     VkDescriptorSetLayoutCreateInfo layout_info{};
     layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layout_info.flags =
+        VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT;
     layout_info.bindingCount = 2;
     layout_info.pBindings    = bindings;
+    layout_info.pNext        = &extended_info;
 
     VkDescriptorSetLayout descriptor_set_layout;
     if (vkCreateDescriptorSetLayout(device->device, &layout_info, nullptr,

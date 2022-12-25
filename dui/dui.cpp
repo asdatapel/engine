@@ -796,8 +796,8 @@ void draw_group_and_children(Group *g)
     push_rect(dl, &s.gdld, tab_rect, tab_color);
 
     push_text(dl, &s.gdld, w->title,
-              tab_rect.xy() + Vec2f{TAB_MARGIN, tab_rect.height -
-              TAB_MARGIN}, {1, 1, 1, 1}, tab_rect.height - 4);
+              tab_rect.xy() + Vec2f{TAB_MARGIN, tab_rect.height - TAB_MARGIN},
+              {1, 1, 1, 1}, tab_rect.height - 4);
   }
 }
 
@@ -1461,7 +1461,8 @@ b8 basic_test_control(String text, Vec2f size, Color color, b8 fill = false)
 
   if (hot) color = darken(color, .1f);
 
-  push_rounded_rect(c->parent.get()->root.get()->dl, &s.gdld, rect, 15.f, color);
+  push_rounded_rect(c->parent.get()->root.get()->dl, &s.gdld, rect, 15.f,
+                    color);
   push_rounded_rect(c->parent.get()->root.get()->dl, &s.gdld, inset(rect, 1.5f),
                     15.f, darken(color, .2f));
 
@@ -1469,6 +1470,17 @@ b8 basic_test_control(String text, Vec2f size, Color color, b8 fill = false)
                      rect.center(), {true, true}, {1, 1, 1, 1}, 21);
 
   return clicked;
+}
+
+void texture(Vec2f size, u32 texture_id)
+{
+  Container *c = get_current_container(&s);
+  if (!c) return;
+
+  Rect rect = c->place(size, true);
+
+  push_texture_rect(c->parent.get()->root.get()->dl, &s.gdld, rect,
+                    {0, 0, 1, 1}, texture_id);
 }
 
 template <u64 N>
@@ -1641,10 +1653,10 @@ void text_input(StaticString<N> *str)
                      {1, 1, 1, 1}, 21);
 
   if (selected) {
-    Rect cursor_rect = {floorf(cursor_pos), rect.y + 3, 2.f, rect.height - 6};
-    push_rect(
-        dl, &s.gdld, cursor_rect,
-        {.01f, .01f, .01f, 1.f - (f32)((i32)(cursor_blink_time * 1.5) % 2)});
+    Rect cursor_rect   = {floorf(cursor_pos), rect.y + 3, 2.f, rect.height - 6};
+    Color cursor_color = highlight;
+    cursor_color.a     = 1.f - (f32)((i32)(cursor_blink_time * 1.5) % 2);
+    push_rect(dl, &s.gdld, cursor_rect, cursor_color);
   }
   pop_scissor(&s.gdld);
 
@@ -1743,8 +1755,28 @@ API void api_debug_ui_test(Device *device, Pipeline pipeline, Input *input,
   set_window_color({.3, .6, .4, .5});
   end_window();
 
-  DuiId w8 = start_window("test8", {700, 100, 200, 300});
-  set_window_color({.3, .6, .4, .5});
+  DuiId w8 = start_window("test8", {100, 100, 800, 800});
+  static Image image;
+  static ImageBuffer image_buf;
+  static VkImageView image_view;
+  static VkSampler sampler;
+  static u32 texture_id = -1;
+
+  static b8 tex_init = false;
+  if (!tex_init) {
+    tex_init = true;
+
+    image      = Image(512, 512, sizeof(u32), &system_allocator);
+    image_buf  = create_image(device, 512, 512, VK_FORMAT_R8G8B8A8_UNORM);
+    image_view = create_image_view(device, image_buf, VK_FORMAT_R8G8B8A8_UNORM);
+    sampler    = create_sampler(device, false, false);
+
+    texture_id = push_texture(device, &s.gdld, image_view, sampler);
+  }
+
+  upload_image(device, image_buf, image);
+  texture({500, 500}, texture_id);
+
   end_window();
 
   auto p = [&](DuiId window_id) {

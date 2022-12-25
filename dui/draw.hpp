@@ -19,7 +19,8 @@ const u32 CORNERS[] = {
 enum struct PrimitiveIds : u32 {
   RECT         = 1 << 18,
   ROUNDED_RECT = 2 << 18,
-  BITMAP_GLYPH = 3 << 18,
+  TEXTURE_RECT = 3 << 18,
+  BITMAP_GLYPH = 4 << 18,
 };
 
 struct RectPrimitive {
@@ -34,6 +35,14 @@ struct RoundedRectPrimitive {
   f32 pad;
 };
 
+struct TextureRectPrimitive {
+  Rect dimensions;
+  Vec4f uv_bounds;
+  u32 texture_idx;
+  u32 clip_rect_idx;
+  Vec2f pad;
+};
+
 struct BitmapGlyphPrimitive {
   Rect dimensions;
   Vec4f uv_bounds;
@@ -46,6 +55,7 @@ struct Primitives {
   RectPrimitive clip_rects[1024];
   RoundedRectPrimitive rounded_rects[1024];
   BitmapGlyphPrimitive bitmap_glyphs[1024];
+  TextureRectPrimitive texture_rects[1024];
 };
 
 struct GlobalDrawListData {
@@ -60,9 +70,12 @@ struct GlobalDrawListData {
 
   Font font;
 
+  u32 texture_count = 1;
+
   Primitives primitives;
   i32 clip_rects_count    = 0;
   i32 rounded_rects_count = 0;
+  i32 texture_rects_count = 0;
   i32 bitmap_glyphs_count = 0;
 
   StaticStack<Rect, 1024> scissors;
@@ -74,7 +87,6 @@ struct DrawCall {
   i32 tri_count;
 
   Rect scissor;
-  // Texture texture;
 };
 
 struct DrawList {
@@ -96,12 +108,12 @@ void init_draw_system(GlobalDrawListData *gdld, Device *device,
 
   gdld->font =
       load_font("resources/fonts/OpenSans-Regular.ttf", 21, &system_allocator);
-  gdld->image =
-      create_image(device, gdld->font.atlas.width, gdld->font.atlas.height);
-  gdld->image_view = create_image_view(device, gdld->image);
+  gdld->image      = create_image(device, gdld->font.atlas.width,
+                                  gdld->font.atlas.height, VK_FORMAT_R8_UNORM);
+  gdld->image_view = create_image_view(device, gdld->image, VK_FORMAT_R8_UNORM);
   gdld->sampler    = create_sampler(device);
   upload_image(device, gdld->image, gdld->font.atlas);
-  write_sampler(device, gdld->desc_set, gdld->image_view, gdld->sampler, 0);
+  bind_sampler(device, gdld->desc_set, gdld->image_view, gdld->sampler, 0);
 
   gdld->primitive_buffer = create_storage_buffer(device, MB);
   bind_storage_buffer(device, gdld->desc_set, gdld->primitive_buffer, 1);
@@ -123,6 +135,7 @@ void draw_system_start_frame(GlobalDrawListData *gdld)
 {
   gdld->clip_rects_count    = 0;
   gdld->rounded_rects_count = 0;
+  gdld->texture_rects_count = 0;
   gdld->bitmap_glyphs_count = 0;
 
   gdld->scissor_idxs.clear();
@@ -166,6 +179,14 @@ void draw_draw_list(DrawList *dl, GlobalDrawListData *gdld, Device *device,
     draw_indexed(device, dl->index_buffer, call.vert_offset,
                  call.tri_count * 3);
   }
+}
+
+u32 push_texture(Device *device, GlobalDrawListData *gdld,
+                 VkImageView image_view, VkSampler sampler)
+{
+  bind_sampler(device, gdld->desc_set, image_view, sampler, 0,
+               gdld->texture_count++);
+  return gdld->texture_count - 1;
 }
 
 void push_draw_call(DrawList *dl, i32 tri_count)
@@ -221,6 +242,11 @@ void push_rounded_rect(DrawList *dl, GlobalDrawListData *gdld, Rect rect,
   push_draw_call(dl, 2);
 }
 
+void push_rect(DrawList *dl, GlobalDrawListData *gdld, Rect rect, Color color)
+{
+  push_rounded_rect(dl, gdld, rect, 0, color);
+}
+
 u32 push_primitive_bitmap_glyph(GlobalDrawListData *gdld, Rect rect,
                                 Vec4f uv_bounds, Color color)
 {
@@ -261,11 +287,6 @@ void push_bitmap_glyph(DrawList *dl, GlobalDrawListData *gdld, Rect rect,
   push_draw_call(dl, 2);
 }
 
-void push_rect(DrawList *dl, GlobalDrawListData *gdld, Rect rect, Color color)
-{
-  push_rounded_rect(dl, gdld, rect, 0, color);
-}
-
 void push_text(DrawList *dl, GlobalDrawListData *gdld, String text, Vec2f pos,
                Color color, f32 height)
 {
@@ -299,6 +320,39 @@ void push_text_centered(DrawList *dl, GlobalDrawListData *gdld, String text,
       center.y ? pos.y + (gdld->font.ascent + gdld->font.descent) / 2.f : pos.y;
 
   push_text(dl, gdld, text, centered_pos, color, height);
+}
+
+void push_texture_rect(DrawList *dl, GlobalDrawListData *gdld, Rect rect,
+                       Vec4f uv_bounds, u32 texture_id)
+{
+  auto push_primitive_texture_rect = [](GlobalDrawListData *gdld, Rect rect,
+                                        Vec4f uv_bounds, u32 texture_id) {
+    gdld->primitives.texture_rects[gdld->texture_rects_count++] = {
+        rect, uv_bounds, texture_id, gdld->scissor_idxs.top()};
+
+    return gdld->texture_rects_count - 1;
+  };
+  auto push_texture_rect_vert = [](DrawList *dl, u32 primitive_index,
+                                   u8 corner) {
+    dl->verts[dl->vert_count++] = {(u32)PrimitiveIds::TEXTURE_RECT |
+                                   CORNERS[corner] | primitive_index};
+  };
+
+  if (!overlaps(rect, gdld->scissors.top())) {
+    return;
+  }
+
+  u32 primitive_idx =
+      push_primitive_texture_rect(gdld, rect, uv_bounds, texture_id);
+
+  push_texture_rect_vert(dl, primitive_idx, 0);
+  push_texture_rect_vert(dl, primitive_idx, 1);
+  push_texture_rect_vert(dl, primitive_idx, 2);
+  push_texture_rect_vert(dl, primitive_idx, 1);
+  push_texture_rect_vert(dl, primitive_idx, 3);
+  push_texture_rect_vert(dl, primitive_idx, 2);
+
+  push_draw_call(dl, 2);
 }
 
 // TODO allow pushing a temporary drawcall then can be updated later.

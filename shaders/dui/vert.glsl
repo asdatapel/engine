@@ -4,13 +4,13 @@
 
 layout(location = 0) out vec2 out_uv;
 layout(location = 1) out vec4 out_color;
-layout(location = 2) out float out_texture_blend_factor;
-layout(location = 3) out vec2 out_rect_positive_extents;
-layout(location = 4) out vec2 out_position;
-layout(location = 5) out vec2 out_rect_center;
-layout(location = 6) out float out_rect_corner_radius;
-layout(location = 7) out vec4 out_clip_rect_bounds;
-layout(location = 8) out flat uint out_primitive_type;
+layout(location = 2) out vec2 out_rect_positive_extents;
+layout(location = 3) out vec2 out_position;
+layout(location = 4) out vec2 out_rect_center;
+layout(location = 5) out float out_rect_corner_radius;
+layout(location = 6) out vec4 out_clip_rect_bounds;
+layout(location = 7) out flat uint out_primitive_type;
+layout(location = 8) out flat uint out_texture_idx;
 
 layout( push_constant ) uniform constants
 {
@@ -48,11 +48,34 @@ void main() {
         vec2 rect_center = r.dimensions.xy + r.dimensions.zw / 2;
 
         out_color = uint_to_vec_color(r.color);
-        out_texture_blend_factor = 0;
         out_rect_positive_extents = rect_positive_extents;
         out_position = verts[corner];
         out_rect_center = rect_center;
         out_rect_corner_radius = r.corner_radius;
+        out_clip_rect_bounds = vec4(clip.rect.x, clip.rect.y, clip.rect.x + clip.rect.z, clip.rect.y + clip.rect.w);
+    } else if (out_primitive_type == TEXTURE_RECT) {
+        TextureRectPrimitive p = primitives.texture_rects[primitive_idx];
+        RectPrimitive clip = primitives.clip_rects[p.clip_rect_idx];
+
+        uint corner = (gl_VertexIndex >> 16) & 0x3;
+        vec2 verts[] = {
+            {p.dimensions.x, p.dimensions.y},
+            {p.dimensions.x + p.dimensions.z, p.dimensions.y},
+            {p.dimensions.x,  p.dimensions.y + p.dimensions.w},
+            {p.dimensions.x + p.dimensions.z,  p.dimensions.y + p.dimensions.w},
+        };
+        vec2 uvs[] = {
+            {p.uv_bounds.x, p.uv_bounds.y},
+            {p.uv_bounds.z, p.uv_bounds.y},
+            {p.uv_bounds.x,  p.uv_bounds.w},
+            {p.uv_bounds.z,  p.uv_bounds.w},
+        };
+
+        gl_Position = vec4(verts[corner] / push_constants.canvas_size * vec2(2, 2) - vec2(1, 1), 0, 1);
+
+        out_uv = uvs[corner];
+        out_position = verts[corner];
+        out_texture_idx = p.texture_idx;
         out_clip_rect_bounds = vec4(clip.rect.x, clip.rect.y, clip.rect.x + clip.rect.z, clip.rect.y + clip.rect.w);
     } else if (out_primitive_type == BITMAP_GLYPH) {
         BitmapGlyphPrimitive p = primitives.bitmap_glyphs[primitive_idx];
@@ -74,13 +97,8 @@ void main() {
 
         gl_Position = vec4(verts[corner] / push_constants.canvas_size * vec2(2, 2) - vec2(1, 1), 0, 1);
 
-        vec2 rect_positive_extents = p.dimensions.zw / 2;
-        vec2 rect_center = p.dimensions.xy + p.dimensions.zw / 2;
-
         out_uv = uvs[corner];
         out_color = uint_to_vec_color(p.color);
-        out_texture_blend_factor = 0;
-        out_rect_positive_extents = rect_positive_extents;
         out_position = verts[corner];
         out_clip_rect_bounds = vec4(clip.rect.x, clip.rect.y, clip.rect.x + clip.rect.z, clip.rect.y + clip.rect.w);
     }

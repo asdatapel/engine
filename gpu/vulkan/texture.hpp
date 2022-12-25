@@ -10,7 +10,7 @@ struct ImageBuffer {
   VkDeviceMemory memory;
 };
 
-ImageBuffer create_image(Device *device, u32 width, u32 height)
+ImageBuffer create_image(Device *device, u32 width, u32 height, VkFormat format)
 {
   VkImageCreateInfo image_info{};
   image_info.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -22,7 +22,7 @@ ImageBuffer create_image(Device *device, u32 width, u32 height)
   image_info.arrayLayers   = 1;
   image_info.samples       = VK_SAMPLE_COUNT_1_BIT;
   image_info.flags         = 0;  // Optional
-  image_info.format        = VK_FORMAT_R8_UNORM;
+  image_info.format        = format;
   image_info.tiling        = VK_IMAGE_TILING_OPTIMAL;
   image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
   image_info.usage =
@@ -174,13 +174,13 @@ void upload_image(Device *device, ImageBuffer image_buf, Image image)
   destroy_buffer(device, staging_buffer);
 }
 
-VkImageView create_image_view(Device *device, ImageBuffer image_buf)
+VkImageView create_image_view(Device *device, ImageBuffer image_buf, VkFormat format)
 {
   VkImageViewCreateInfo view_info{};
   view_info.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
   view_info.image    = image_buf.image;
   view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-  view_info.format   = VK_FORMAT_R8_UNORM;
+  view_info.format   = format;
   view_info.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
   view_info.subresourceRange.baseMipLevel   = 0;
   view_info.subresourceRange.levelCount     = 1;
@@ -196,16 +196,16 @@ VkImageView create_image_view(Device *device, ImageBuffer image_buf)
   return image_view;
 }
 
-VkSampler create_sampler(Device *device)
+VkSampler create_sampler(Device *device, b8 linear_filter = true, b8 repeat = true)
 {
   VkSamplerCreateInfo sampler_info{};
   sampler_info.sType     = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-  sampler_info.magFilter = VK_FILTER_LINEAR;
-  sampler_info.minFilter = VK_FILTER_LINEAR;
+  sampler_info.magFilter = linear_filter ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+  sampler_info.minFilter = linear_filter ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
 
-  sampler_info.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-  sampler_info.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-  sampler_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+  sampler_info.addressModeU = repeat ? VK_SAMPLER_ADDRESS_MODE_REPEAT : VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  sampler_info.addressModeV = repeat ? VK_SAMPLER_ADDRESS_MODE_REPEAT : VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  sampler_info.addressModeW = repeat ? VK_SAMPLER_ADDRESS_MODE_REPEAT : VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
 
   sampler_info.anisotropyEnable = VK_FALSE;
   sampler_info.maxAnisotropy    = 0;
@@ -219,8 +219,8 @@ VkSampler create_sampler(Device *device)
   return sampler;
 }
 
-void write_sampler(Device *device, VkDescriptorSet descriptor_set,
-                   VkImageView image_view, VkSampler sampler, u32 binding)
+void bind_sampler(Device *device, VkDescriptorSet descriptor_set,
+                   VkImageView image_view, VkSampler sampler, u32 binding, u32 index = 0)
 {
   VkDescriptorImageInfo image_info{};
   image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -231,7 +231,7 @@ void write_sampler(Device *device, VkDescriptorSet descriptor_set,
   descriptor_write.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
   descriptor_write.dstSet          = descriptor_set;
   descriptor_write.dstBinding      = binding;
-  descriptor_write.dstArrayElement = 0;
+  descriptor_write.dstArrayElement = index;
   descriptor_write.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
   descriptor_write.descriptorCount = 1;
   descriptor_write.pImageInfo      = &image_info;
@@ -239,24 +239,24 @@ void write_sampler(Device *device, VkDescriptorSet descriptor_set,
   vkUpdateDescriptorSets(device->device, 1, &descriptor_write, 0, nullptr);
 }
 
-struct Texture {
-  ImageBuffer image_buffer;
-  VkImageView image_view_ref;
-  VkSampler sampler_ref;
+// struct Texture {
+//   ImageBuffer image_buffer;
+//   VkImageView image_view_ref;
+//   VkSampler sampler_ref;
 
-  VkDescriptorSet desc_set;
-};
+//   VkDescriptorSet desc_set;
+// };
 
-Texture create_texture(Device *device)
-{
-  Texture tex;
+// Texture create_texture(Device *device)
+// {
+//   Texture tex;
 
-  tex.image_buffer   = create_image(device, 256, 256);
-  tex.image_view_ref = create_image_view(device, tex.image_buffer);
-  tex.sampler_ref    = create_sampler(device);
+//   tex.image_buffer   = create_image(device, 256, 256);
+//   tex.image_view_ref = create_image_view(device, tex.image_buffer);
+//   tex.sampler_ref    = create_sampler(device);
 
-  // VkDescriptorSet desc_set = gpu->create_descriptor_set(pipeline);
-  // vulkan.write_sampler(desc_set, image_view, sampler);
+//   // VkDescriptorSet desc_set = gpu->create_descriptor_set(pipeline);
+//   // vulkan.write_sampler(desc_set, image_view, sampler);
 
-  return tex;
-}
+//   return tex;
+// }

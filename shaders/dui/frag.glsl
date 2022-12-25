@@ -1,18 +1,20 @@
 #version 450
 
+#extension GL_EXT_nonuniform_qualifier : enable
+
 #include "primitives.glsl"
 
-layout(binding = 0) uniform sampler2D tex_sampler;
+layout(binding = 0) uniform sampler2D tex_samplers[];
 
 layout(location = 0) in vec2 in_uv;
 layout(location = 1) in vec4 in_color;
-layout(location = 2) in float in_texture_blend_factor;
-layout(location = 3) in vec2 in_rect_positive_extents;
-layout(location = 4) in vec2 in_position;
-layout(location = 5) in vec2 in_rect_center;
-layout(location = 6) in float in_rect_corner_radius;
-layout(location = 7) in vec4 in_clip_rect_bounds;
-layout(location = 8) in flat uint in_primitive_type;
+layout(location = 2) in vec2 in_rect_positive_extents;
+layout(location = 3) in vec2 in_position;
+layout(location = 4) in vec2 in_rect_center;
+layout(location = 5) in float in_rect_corner_radius;
+layout(location = 6) in vec4 in_clip_rect_bounds;
+layout(location = 7) in flat uint in_primitive_type;
+layout(location = 8) in flat uint in_texture_idx;
 
 layout(location = 0) out vec4 out_color;
 
@@ -40,13 +42,13 @@ void main() {
           out_color.a = color * out_color.a;
       }
 
-      //vec2 axes_in_bounds = step(in_clip_rect_bounds.xy, in_position) * step(in_position, in_clip_rect_bounds.zw);
-      //float both_in_bounds = axes_in_bounds.x * axes_in_bounds.y;
-      //out_color.a = mix(0, out_color.a, both_in_bounds);
       out_color.a *= clip(in_position, in_clip_rect_bounds);
-    }
-    if (in_primitive_type == BITMAP_GLYPH) {
-      out_color = vec4(in_color.rgb, in_color.a * texture(tex_sampler, in_uv).r);
+    } else if (in_primitive_type == TEXTURE_RECT) {
+      out_color = texture(tex_samplers[in_texture_idx], in_uv);
+      out_color.a *= clip(in_position, in_clip_rect_bounds);
+      //out_color = vec4(1, 0, 0, 1);
+    } else if (in_primitive_type == BITMAP_GLYPH) {
+      out_color = vec4(in_color.rgb, in_color.a * texture(tex_samplers[0], in_uv).r);
       out_color.a *= clip(in_position, in_clip_rect_bounds);
     }
 }

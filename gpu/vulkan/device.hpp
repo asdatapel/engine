@@ -41,17 +41,22 @@ Device init_device(Platform::VulkanExtensions vulkan_extensions,
 
   VkApplicationInfo app_info{};
   app_info.sType              = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-  app_info.pApplicationName   = "Hello Triangle";
+  app_info.pApplicationName   = "Fracas";
   app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
   app_info.pEngineName        = "No Engine";
   app_info.engineVersion      = VK_MAKE_VERSION(1, 0, 0);
   app_info.apiVersion         = VK_API_VERSION_1_3;
 
+  Array<const char *, 20> extensions;
+  for (i32 i = 0; i < vulkan_extensions.count; i++) {
+    extensions.push_back(vulkan_extensions.extensions[i]);
+  }
+
   VkInstanceCreateInfo create_info{};
   create_info.sType                   = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   create_info.pApplicationInfo        = &app_info;
-  create_info.enabledExtensionCount   = vulkan_extensions.count;
-  create_info.ppEnabledExtensionNames = vulkan_extensions.extensions;
+  create_info.enabledExtensionCount   = extensions.size;
+  create_info.ppEnabledExtensionNames = extensions.data;
   create_info.enabledLayerCount       = 0;
 
   if (enable_validation) {
@@ -103,11 +108,21 @@ Device init_device(Platform::VulkanExtensions vulkan_extensions,
     queue_create_info.queueCount       = 1;
     queue_create_info.pQueuePriorities = queue_priorities;
 
+    // this is for bbindless textures
+    // TODO: check whether these features are available
+    VkPhysicalDeviceDescriptorIndexingFeaturesEXT indexing_features{};
+    indexing_features.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT;
+    indexing_features.pNext                           = nullptr;
+    indexing_features.descriptorBindingPartiallyBound = VK_TRUE;
+    indexing_features.runtimeDescriptorArray          = VK_TRUE;
+
     VkDeviceCreateInfo create_info{};
     create_info.sType                = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     create_info.pQueueCreateInfos    = &queue_create_info;
     create_info.queueCreateInfoCount = 1;
     create_info.pEnabledFeatures     = nullptr;
+    create_info.pNext                = &indexing_features;
 
     const char *extensions[]            = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
     create_info.ppEnabledExtensionNames = extensions;
@@ -150,7 +165,7 @@ Device init_device(Platform::VulkanExtensions vulkan_extensions,
     uniforms_pool_size.descriptorCount = 1000;
     VkDescriptorPoolSize combined_sampler_pool_size{};
     uniforms_pool_size.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    uniforms_pool_size.descriptorCount = 1000;
+    uniforms_pool_size.descriptorCount = 1001;
 
     VkDescriptorPoolSize pool_sizes[] = {storage_buffer_pool_size,
                                          uniforms_pool_size,
@@ -158,6 +173,7 @@ Device init_device(Platform::VulkanExtensions vulkan_extensions,
 
     VkDescriptorPoolCreateInfo pool_info{};
     pool_info.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT_EXT;
     pool_info.poolSizeCount = 3;
     pool_info.pPoolSizes    = pool_sizes;
     pool_info.maxSets       = 1000;
