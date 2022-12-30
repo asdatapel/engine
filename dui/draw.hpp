@@ -2,6 +2,7 @@
 
 #include "containers/static_stack.hpp"
 #include "font.hpp"
+#include "font/vector_font.hpp"
 #include "gpu/vulkan/vulkan.hpp"
 #include "math/math.hpp"
 #include "types.hpp"
@@ -21,6 +22,7 @@ enum struct PrimitiveIds : u32 {
   ROUNDED_RECT = 2 << 18,
   TEXTURE_RECT = 3 << 18,
   BITMAP_GLYPH = 4 << 18,
+  VECTOR_GLYPH = 5 << 18,
 };
 
 struct RectPrimitive {
@@ -51,11 +53,26 @@ struct BitmapGlyphPrimitive {
   Vec2f pad;
 };
 
+struct ConicCurvePrimitive {
+  Vec2f p0, p1, p2;
+  Vec2f pad;
+};
+
+struct VectorGlyphPrimitive {
+  Rect dimensions;
+  u32 curve_start_idx;
+  u32 curve_count;
+  u32 color;
+  u32 clip_rect_idx;
+};
+
 struct Primitives {
   RectPrimitive clip_rects[1024];
   RoundedRectPrimitive rounded_rects[1024];
   BitmapGlyphPrimitive bitmap_glyphs[1024];
   TextureRectPrimitive texture_rects[1024];
+  VectorGlyphPrimitive vector_glyphs[1024];
+  ConicCurvePrimitive conic_curves[2048];
 };
 
 struct GlobalDrawListData {
@@ -69,6 +86,7 @@ struct GlobalDrawListData {
   Buffer primitive_buffer;
 
   Font font;
+  VectorFont vfont;
 
   u32 texture_count = 1;
 
@@ -77,6 +95,8 @@ struct GlobalDrawListData {
   i32 rounded_rects_count = 0;
   i32 texture_rects_count = 0;
   i32 bitmap_glyphs_count = 0;
+  i32 conic_curves_count  = 0;
+  i32 vector_glyphs_count = 0;
 
   StaticStack<Rect, 1024> scissors;
   StaticStack<u32, 1024> scissor_idxs;
@@ -106,14 +126,12 @@ void init_draw_system(GlobalDrawListData *gdld, Device *device,
   // TODO: create pipeline here
   gdld->desc_set = create_descriptor_set(device, pipeline);
 
-  gdld->font =
-      load_font("resources/fonts/OpenSans-Regular.ttf", 21, &system_allocator);
-  gdld->image      = create_image(device, gdld->font.atlas.width,
-                                  gdld->font.atlas.height, VK_FORMAT_R8_UNORM);
-  gdld->image_view = create_image_view(device, gdld->image, VK_FORMAT_R8_UNORM);
-  gdld->sampler    = create_sampler(device);
-  upload_image(device, gdld->image, gdld->font.atlas);
-  bind_sampler(device, gdld->desc_set, gdld->image_view, gdld->sampler, 0);
+  gdld->vfont = create_font();
+  for (i32 i = 0; i < gdld->vfont.curves.size; i++) {
+    gdld->primitives.conic_curves[gdld->conic_curves_count++] = {
+        gdld->vfont.curves[i].p0, gdld->vfont.curves[i].p1,
+        gdld->vfont.curves[i].p2};
+  }
 
   gdld->primitive_buffer = create_storage_buffer(device, MB);
   bind_storage_buffer(device, gdld->desc_set, gdld->primitive_buffer, 1);
@@ -121,6 +139,22 @@ void init_draw_system(GlobalDrawListData *gdld, Device *device,
 
 void push_scissor(GlobalDrawListData *gdld, Rect rect)
 {
+  auto to_bounds = [](Rect r) {
+    return Vec4f{r.x, r.y, r.x + r.width, r.y + r.height};
+  };
+  if (gdld->scissors.count > 0) {
+    Vec4f rect_bounds   = to_bounds(rect);
+    Vec4f parent_bounds = to_bounds(gdld->scissors.top());
+
+    rect_bounds.x = fmaxf(rect_bounds.x, parent_bounds.x);
+    rect_bounds.y = fmaxf(rect_bounds.y, parent_bounds.y);
+    rect_bounds.z = fminf(rect_bounds.z, parent_bounds.z);
+    rect_bounds.w = fminf(rect_bounds.w, parent_bounds.w);
+
+    rect = {rect_bounds.x, rect_bounds.y, rect_bounds.z - rect_bounds.x,
+            rect_bounds.w - rect_bounds.y};
+  }
+
   gdld->primitives.clip_rects[gdld->clip_rects_count++] = {rect};
   gdld->scissor_idxs.push_back(gdld->clip_rects_count - 1);
   gdld->scissors.push_back(rect);
@@ -137,6 +171,7 @@ void draw_system_start_frame(GlobalDrawListData *gdld)
   gdld->rounded_rects_count = 0;
   gdld->texture_rects_count = 0;
   gdld->bitmap_glyphs_count = 0;
+  gdld->vector_glyphs_count = 0;
 
   gdld->scissor_idxs.clear();
   gdld->scissors.clear();
@@ -204,13 +239,6 @@ void push_draw_call(DrawList *dl, i32 tri_count)
 u32 push_primitive_rounded_rect(GlobalDrawListData *gdld, Rect rect,
                                 Color color, f32 corner_radius)
 {
-  auto color_to_int = [](Color c) {
-    u32 r = (u32)(c.r * 255) & 0xFF;
-    u32 g = (u32)(c.g * 255) & 0xFF;
-    u32 b = (u32)(c.b * 255) & 0xFF;
-    u32 a = (u32)(c.a * 255) & 0xFF;
-    return (r << 24) | (g << 16) | (b << 8) | (a);
-  };
   gdld->primitives.rounded_rects[gdld->rounded_rects_count++] = {
       rect, gdld->scissor_idxs.top(), color_to_int(color), corner_radius};
 
@@ -250,13 +278,6 @@ void push_rect(DrawList *dl, GlobalDrawListData *gdld, Rect rect, Color color)
 u32 push_primitive_bitmap_glyph(GlobalDrawListData *gdld, Rect rect,
                                 Vec4f uv_bounds, Color color)
 {
-  auto color_to_int = [](Color c) {
-    u32 r = (u32)(c.r * 255) & 0xFF;
-    u32 g = (u32)(c.g * 255) & 0xFF;
-    u32 b = (u32)(c.b * 255) & 0xFF;
-    u32 a = (u32)(c.a * 255) & 0xFF;
-    return (r << 24) | (g << 16) | (b << 8) | (a);
-  };
   gdld->primitives.bitmap_glyphs[gdld->bitmap_glyphs_count++] = {
       rect, uv_bounds, gdld->scissor_idxs.top(), color_to_int(color)};
 
@@ -321,6 +342,91 @@ void push_text_centered(DrawList *dl, GlobalDrawListData *gdld, String text,
 
   push_text(dl, gdld, text, centered_pos, color, height);
 }
+
+u32 push_primitive_vector_glyph(GlobalDrawListData *gdld, Rect rect,
+                                Glyph glyph, Color color)
+{
+  gdld->primitives.vector_glyphs[gdld->vector_glyphs_count++] = {
+      rect, glyph.curve_start_idx, glyph.curve_count, color_to_int(color),
+      gdld->scissor_idxs.top()};
+
+  return gdld->vector_glyphs_count - 1;
+}
+
+void push_vector_glyph(DrawList *dl, GlobalDrawListData *gdld, Rect rect,
+                       Glyph glyph, Color color)
+{
+  auto push_glyph_vert = [](DrawList *dl, u32 primitive_index, u8 corner) {
+    dl->verts[dl->vert_count++] = {(u32)PrimitiveIds::VECTOR_GLYPH |
+                                   CORNERS[corner] | primitive_index};
+  };
+
+  if (!overlaps(rect, gdld->scissors.top())) {
+    return;
+  }
+
+  u32 primitive_idx = push_primitive_vector_glyph(gdld, rect, glyph, color);
+
+  push_glyph_vert(dl, primitive_idx, 0);
+  push_glyph_vert(dl, primitive_idx, 1);
+  push_glyph_vert(dl, primitive_idx, 2);
+  push_glyph_vert(dl, primitive_idx, 1);
+  push_glyph_vert(dl, primitive_idx, 3);
+  push_glyph_vert(dl, primitive_idx, 2);
+
+  push_draw_call(dl, 2);
+}
+
+void push_vector_text(DrawList *dl, GlobalDrawListData *gdld, String text,
+                      Vec2f pos, Color color, f32 size)
+{
+  for (int i = 0; i < text.size; i++) {
+    Glyph g = gdld->vfont.glyphs[text.data[i]];
+
+    f32 width       = size * g.size.x;
+    f32 height      = size * g.size.y;
+    Rect shape_rect = {
+        pos.x + (size * g.bearing.x),
+        pos.y + (size * gdld->vfont.ascent) - (size * g.bearing.y), width,
+        height};
+    pos.x += size * g.advance;
+
+    push_vector_glyph(dl, gdld, shape_rect, gdld->vfont.glyphs[text.data[i]],
+                      color);
+  }
+};
+
+void push_vector_text_centered(DrawList *dl, GlobalDrawListData *gdld,
+                               String text, Vec2f pos, Color color, f32 size,
+                               Vec2b center)
+{
+  if (center.x) {
+    f32 text_width = 0;
+    for (int i = 0; i < text.size - 1; i++) {
+      Glyph g = gdld->vfont.glyphs[text.data[i]];
+      text_width += size * g.advance;
+    }
+    text_width += gdld->vfont.glyphs[text.data[text.size - 1]].size.y * size;
+
+    pos.x -= text_width / 2;
+  }
+  if (center.y) pos.y -= size / 2;
+
+  for (int i = 0; i < text.size; i++) {
+    Glyph g = gdld->vfont.glyphs[text.data[i]];
+
+    f32 width       = size * g.size.x;
+    f32 height      = size * g.size.y;
+    Rect shape_rect = {
+        pos.x + (size * g.bearing.x),
+        pos.y + (size * gdld->vfont.ascent) - (size * g.bearing.y), width,
+        height};
+    pos.x += size * g.advance;
+
+    push_vector_glyph(dl, gdld, shape_rect, gdld->vfont.glyphs[text.data[i]],
+                      color);
+  }
+};
 
 void push_texture_rect(DrawList *dl, GlobalDrawListData *gdld, Rect rect,
                        Vec4f uv_bounds, u32 texture_id)

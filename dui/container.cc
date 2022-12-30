@@ -19,6 +19,10 @@ void Container::start_frame(DuiState *s, Input *input, i64 current_frame)
   cursor      = {0, 0};
   cursor_size = 0;
 
+  b8 has_scrollwheel_focus =
+      (s->top_root_group_at_mouse_pos == parent.get()->root) &&
+      in_rect(input->mouse_pos, content_rect);
+
   // FYI doing this here can cause the position of the scrollbar to lag behind
   // a moving container. Its ok though because it will still be drawn in the
   // correct position, and you shouldn't be interacting with a scrollbar while
@@ -78,7 +82,7 @@ void Container::start_frame(DuiState *s, Input *input, i64 current_frame)
     push_rounded_rect(parent.get()->root.get()->dl, &s->gdld, scrollbar_rect,
                       scrollbar_rect.width / 2.f, color);
 
-    if (!input->keys[(i32)Keys::LSHIFT]) {
+    if (has_scrollwheel_focus && !input->keys[(i32)Keys::LSHIFT]) {
       scroll_offset_target.y += input->scrollwheel_count * 100.f;
     }
   }
@@ -137,7 +141,7 @@ void Container::start_frame(DuiState *s, Input *input, i64 current_frame)
     push_rounded_rect(parent.get()->root.get()->dl, &s->gdld, scrollbar_rect,
                       scrollbar_rect.height / 2.f, color);
 
-    if (input->keys[(i32)Keys::LSHIFT]) {
+    if (has_scrollwheel_focus && input->keys[(i32)Keys::LSHIFT]) {
       scroll_offset_target.x += input->scrollwheel_count * 100.f;
     }
   }

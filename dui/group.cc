@@ -83,7 +83,7 @@ f32 Group::get_base_tab_width()
 f32 Group::get_desired_tab_width(i32 window_idx)
 {
   Container *window = get_container(windows[window_idx]);
-  return get_text_width(s.gdld.font, window->title) + TAB_MARGIN * 2;
+  return s.gdld.vfont.get_text_width(window->title, 21) + TAB_MARGIN * 2;
 }
 
 Vec2f Group::get_tab_margin_span(i32 window_idx,

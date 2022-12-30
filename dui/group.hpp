@@ -7,7 +7,7 @@
 
 const f32 TITLEBAR_HEIGHT               = 32;
 const f32 TITLEBAR_BOTTOM_BORDER_HEIGHT = 3.f;
-const f32 TAB_MARGIN                    = 6.f;
+const f32 TAB_MARGIN                    = 3.f;
 const f32 WINDOW_BORDER_SIZE            = 2.f;
 const f32 WINDOW_CONTROL_WIDTH          = 20.f;
 const f32 WINDOW_MARGIN_SIZE            = 4.f;

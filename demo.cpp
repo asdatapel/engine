@@ -24,6 +24,7 @@ int main()
   init_dui_dll();
   Dui::init_dui(&device, pipeline);
 
+
   while (!window.should_close()) {
     Platform::fill_input(&window, &input);
 

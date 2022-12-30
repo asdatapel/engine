@@ -795,9 +795,11 @@ void draw_group_and_children(Group *g)
     }
     push_rect(dl, &s.gdld, tab_rect, tab_color);
 
-    push_text(dl, &s.gdld, w->title,
-              tab_rect.xy() + Vec2f{TAB_MARGIN, tab_rect.height - TAB_MARGIN},
-              {1, 1, 1, 1}, tab_rect.height - 4);
+    push_scissor(&s.gdld, tab_rect);
+    push_vector_text(dl, &s.gdld, w->title,
+                     tab_rect.xy() + Vec2f{TAB_MARGIN, TAB_MARGIN},
+                     {1, 1, 1, 1}, tab_rect.height - (TAB_MARGIN * 2));
+    pop_scissor(&s.gdld);
   }
 }
 
@@ -1432,7 +1434,7 @@ b8 button(String text)
   return button(me, text);
 }
 
-b8 basic_test_control(String text, Vec2f size, Color color, b8 fill = false)
+b8 button(String text, Vec2f size, Color color, b8 fill = false)
 {
   Container *c = get_current_container(&s);
   if (!c) return false;
@@ -1461,13 +1463,12 @@ b8 basic_test_control(String text, Vec2f size, Color color, b8 fill = false)
 
   if (hot) color = darken(color, .1f);
 
-  push_rounded_rect(c->parent.get()->root.get()->dl, &s.gdld, rect, 15.f,
+  push_rounded_rect(c->parent.get()->root.get()->dl, &s.gdld, rect, 5.f,
                     color);
   push_rounded_rect(c->parent.get()->root.get()->dl, &s.gdld, inset(rect, 1.5f),
-                    15.f, darken(color, .2f));
-
-  push_text_centered(c->parent.get()->root.get()->dl, &s.gdld, text,
-                     rect.center(), {true, true}, {1, 1, 1, 1}, 21);
+                    5.f, darken(color, .2f));
+  push_vector_text_centered(c->parent.get()->root.get()->dl, &s.gdld, text,
+                            rect.center(), {1, 1, 1, 1}, 21, {true, true});
 
   return clicked;
 }
@@ -1493,7 +1494,7 @@ void text_input(StaticString<N> *str)
 
   f32 height       = CONTENT_FONT_HEIGHT + 4 + 4;
   Rect border_rect = c->place({0, height}, true, true);
-  Rect rect        = inset(border_rect, 3.f);
+  Rect rect        = inset(border_rect, 1.5f);
 
   b8 hot    = do_hot(id, rect, c->parent.get()->root.get(), c, c->content_rect);
   b8 active = do_active(id);
@@ -1516,12 +1517,13 @@ void text_input(StaticString<N> *str)
     cursor_blink_time = 0.f;
   }
 
-  f32 cursor_pos =
-      text_pos +
-      get_text_width(s.gdld.font, str->to_str().sub(0, cursor_idx), 1);
+  f32 font_size = 21;
+
+  f32 cursor_pos = text_pos + s.gdld.vfont.get_text_width(
+                                  str->to_str().sub(0, cursor_idx), font_size);
   f32 highlight_start_pos =
-      text_pos +
-      get_text_width(s.gdld.font, str->to_str().sub(0, highlight_start_idx), 1);
+      text_pos + s.gdld.vfont.get_text_width(
+                     str->to_str().sub(0, highlight_start_idx), font_size);
   if (cursor_pos < rect.x) {
     // add one just to make sure cursor is fully in the rect.
     text_pos += rect.x - cursor_pos + 1;
@@ -1548,18 +1550,18 @@ void text_input(StaticString<N> *str)
 
   if (selected) {
     if (clicked) {
-      cursor_idx = char_index_at_pos(&s.gdld.font, str->to_str(),
-                                     {text_pos, rect.y + (rect.height / 2)},
-                                     s.input->mouse_pos);
+      cursor_idx = s.gdld.vfont.char_index_at_pos(
+          str->to_str(), {text_pos, rect.y + (rect.height / 2)},
+          s.input->mouse_pos, font_size);
       reset_cursor();
     }
     if (dragging) {
       if (s.just_started_being_dragging == id) {
         highlight_start_idx = cursor_idx;
       }
-      cursor_idx = char_index_at_pos(&s.gdld.font, str->to_str(),
-                                     {text_pos, rect.y + (rect.height / 2)},
-                                     s.input->mouse_pos);
+      cursor_idx = s.gdld.vfont.char_index_at_pos(
+          str->to_str(), {text_pos, rect.y + (rect.height / 2)},
+          s.input->mouse_pos, font_size);
     }
 
     if (s.input->key_down_events[(i32)Keys::LEFT]) {
@@ -1648,12 +1650,12 @@ void text_input(StaticString<N> *str)
     push_rect(dl, &s.gdld, highlight_rect, highlight);
   }
 
-  push_text_centered(dl, &s.gdld, str->to_str(),
-                     {text_pos, rect.y + (rect.height / 2)}, {false, true},
-                     {1, 1, 1, 1}, 21);
+  push_vector_text_centered(dl, &s.gdld, str->to_str(),
+                            {text_pos, rect.y + (rect.height / 2)},
+                            {1, 1, 1, 1}, font_size, {false, true});
 
   if (selected) {
-    Rect cursor_rect   = {floorf(cursor_pos), rect.y + 3, 2.f, rect.height - 6};
+    Rect cursor_rect = {floorf(cursor_pos), rect.y + 3, 1.25f, rect.height - 6};
     Color cursor_color = highlight;
     cursor_color.a     = 1.f - (f32)((i32)(cursor_blink_time * 1.5) % 2);
     push_rect(dl, &s.gdld, cursor_rect, cursor_color);
@@ -1725,17 +1727,17 @@ API void api_debug_ui_test(Device *device, Pipeline pipeline, Input *input,
 
   DuiId w5 = start_window("fifth", {500, 600, 200, 300});
   set_window_color({0.99216, 0.46667, 0.00784, .5});
-  if (basic_test_control("test1", {200, 300}, {1, 1, 1, 0})) info("test1");
-  if (basic_test_control("test2", {150, 100}, {1, 0, 0, 1})) info("test2");
-  if (basic_test_control("test3", {100, 400}, {1, 1, 0, 1}, true))
+  if (button("test21", {200, 300}, {1, 1, 1, 0})) info("test1");
+  if (button("test2", {150, 100}, {1, 0, 0, 1})) info("test2");
+  if (button("test3", {100, 400}, {1, 1, 0, 1}, true))
     info("test3");
   next_line();
-  if (basic_test_control("test4", {200, 600}, {0, 1, 1, 1})) info("test4");
+  if (button("test4", {200, 600}, {0, 1, 1, 1})) info("test4");
   next_line();
-  if (basic_test_control("test5", {200, 700}, {1, 0, 1, 1})) info("test5");
-  if (basic_test_control("test6", {200, 300}, {1, 1, 0, 1})) info("test6");
+  if (button("test5", {200, 700}, {1, 0, 1, 1})) info("test5");
+  if (button("test6", {200, 300}, {1, 1, 0, 1})) info("test6");
   next_line();
-  if (basic_test_control("test7", {200, 100}, {0, 0, 1, 1})) info("test7");
+  if (button("test7", {200, 100}, {0, 0, 1, 1})) info("test7");
   end_window();
 
   DuiId w6 = start_window("sizth", {600, 700, 200, 300});
@@ -1746,8 +1748,8 @@ API void api_debug_ui_test(Device *device, Pipeline pipeline, Input *input,
   static StaticString<128> test_text_input2 = "Asdfing!";
   text_input(&test_text_input2);
 
-  if (basic_test_control("test8", {200, 30}, l_dark, true)) info("test8");
-  if (basic_test_control("test9", {200, 30}, l_dark, true)) info("test9");
+  if (button("test8", {200, 30}, l_dark, true)) info("test8");
+  if (button("test9", {200, 30}, l_dark, true)) info("test9");
   set_window_color({1, 0.31373, 0.01176, .5});
   end_window();
 
@@ -1763,11 +1765,12 @@ API void api_debug_ui_test(Device *device, Pipeline pipeline, Input *input,
   static u32 texture_id = -1;
 
   static b8 tex_init = false;
+  f32 size           = 512;
   if (!tex_init) {
     tex_init = true;
 
-    image      = Image(512, 512, sizeof(u32), &system_allocator);
-    image_buf  = create_image(device, 512, 512, VK_FORMAT_R8G8B8A8_UNORM);
+    image      = Image(size, size, sizeof(u32), &system_allocator);
+    image_buf  = create_image(device, size, size, VK_FORMAT_R8G8B8A8_UNORM);
     image_view = create_image_view(device, image_buf, VK_FORMAT_R8G8B8A8_UNORM);
     sampler    = create_sampler(device, false, false);
 
@@ -1775,7 +1778,7 @@ API void api_debug_ui_test(Device *device, Pipeline pipeline, Input *input,
   }
 
   upload_image(device, image_buf, image);
-  texture({500, 500}, texture_id);
+  texture({size, size}, texture_id);
 
   end_window();
 
@@ -1846,8 +1849,10 @@ API void api_reload_plugin(ReloadData reload_data)
   {
     Container *c = &s.containers.wrapped_get(hash("fourth"));
     Group *g     = c->parent.get();
-    info("before api_get_plugiapi_reload_pluginn_reload_data: ", c->rect.x,
-         ", ", c->rect.y);
+    info(
+        "before "
+        "api_get_plugiapi_reload_pluginn_reload_data: ",
+        c->rect.x, ", ", c->rect.y);
   }
 
   s = *reload_data.dui_state;
@@ -1855,8 +1860,10 @@ API void api_reload_plugin(ReloadData reload_data)
   {
     Container *c = &s.containers.wrapped_get(hash("fourth"));
     Group *g     = c->parent.get();
-    info("after api_get_plugiapi_reload_pluginn_reload_data: ", c->rect.x, ", ",
-         c->rect.y);
+    info(
+        "after "
+        "api_get_plugiapi_reload_pluginn_reload_data: ",
+        c->rect.x, ", ", c->rect.y);
   }
 };
 
