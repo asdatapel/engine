@@ -28,6 +28,10 @@ struct Rect {
   Vec2f xy() { return {x, y}; }
   Vec2f span() { return {width, height}; }
   Vec2f center() { return {x + (width / 2), y + (height / 2)}; }
+  f32 left() { return x; }
+  f32 right() { return x + width; }
+  f32 top() { return y; }
+  f32 bottom() { return y + height; }
 
   static Rect from_ends(Vec2f a, Vec2f b)
   {
@@ -36,18 +40,27 @@ struct Rect {
   }
 };
 
-inline bool operator==(const Rect &lhs, const Rect &rhs)
+inline b8 operator==(const Rect &lhs, const Rect &rhs)
 {
   return lhs.x == rhs.x && lhs.y == rhs.y && lhs.width == rhs.width &&
          lhs.height == rhs.height;
 }
 
-inline bool operator!=(const Rect &lhs, const Rect &rhs)
+inline b8 operator!=(const Rect &lhs, const Rect &rhs) { return !(lhs == rhs); }
+
+b8 overlaps(Rect rect1, Rect rect2)
 {
-  return !(lhs == rhs);
+  return !(rect1.right() < rect2.left() || rect1.left() > rect2.right() ||
+         rect1.bottom() < rect2.top() || rect1.top() > rect2.bottom());
 }
 
-bool in_rect(Vec2f point, Rect rect, Rect mask = {})
+b8 in_rect(Vec2f point, Rect rect)
+{
+  return point.x > rect.x && point.x < rect.x + rect.width &&
+         point.y > rect.y && point.y < rect.y + rect.height;
+}
+
+b8 in_rect(Vec2f point, Rect rect, Rect mask)
 {
   if (mask.width == 0 || mask.height == 0) {
     mask = rect;

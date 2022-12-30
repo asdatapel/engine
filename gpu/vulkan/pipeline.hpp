@@ -18,31 +18,48 @@ VertexDescriptions get_vertex_descriptions()
   VertexDescriptions vertex_descriptions;
 
   vertex_descriptions.binding_description.binding = 0;
-  vertex_descriptions.binding_description.stride  = 9 * sizeof(f32);
+  vertex_descriptions.binding_description.stride  = 13 * sizeof(f32);
   vertex_descriptions.binding_description.inputRate =
       VK_VERTEX_INPUT_RATE_VERTEX;
 
-  vertex_descriptions.vertex_attribute_descriptions.resize(4);
+  vertex_descriptions.vertex_attribute_descriptions.resize(6);
+
   vertex_descriptions.vertex_attribute_descriptions[0].binding  = 0;
   vertex_descriptions.vertex_attribute_descriptions[0].location = 0;
   vertex_descriptions.vertex_attribute_descriptions[0].format =
       VK_FORMAT_R32G32_SFLOAT;
   vertex_descriptions.vertex_attribute_descriptions[0].offset = 0 * sizeof(f32);
+
   vertex_descriptions.vertex_attribute_descriptions[1].binding  = 0;
   vertex_descriptions.vertex_attribute_descriptions[1].location = 1;
   vertex_descriptions.vertex_attribute_descriptions[1].format =
       VK_FORMAT_R32G32_SFLOAT;
   vertex_descriptions.vertex_attribute_descriptions[1].offset = 2 * sizeof(f32);
+
   vertex_descriptions.vertex_attribute_descriptions[2].binding  = 0;
   vertex_descriptions.vertex_attribute_descriptions[2].location = 2;
   vertex_descriptions.vertex_attribute_descriptions[2].format =
       VK_FORMAT_R32G32B32A32_SFLOAT;
   vertex_descriptions.vertex_attribute_descriptions[2].offset = 4 * sizeof(f32);
+
   vertex_descriptions.vertex_attribute_descriptions[3].binding  = 0;
   vertex_descriptions.vertex_attribute_descriptions[3].location = 3;
   vertex_descriptions.vertex_attribute_descriptions[3].format =
       VK_FORMAT_R32_SFLOAT;
   vertex_descriptions.vertex_attribute_descriptions[3].offset = 8 * sizeof(f32);
+
+  vertex_descriptions.vertex_attribute_descriptions[4].binding  = 0;
+  vertex_descriptions.vertex_attribute_descriptions[4].location = 4;
+  vertex_descriptions.vertex_attribute_descriptions[4].format =
+      VK_FORMAT_R32G32_SFLOAT;
+  vertex_descriptions.vertex_attribute_descriptions[4].offset = 9 * sizeof(f32);
+
+  vertex_descriptions.vertex_attribute_descriptions[5].binding  = 0;
+  vertex_descriptions.vertex_attribute_descriptions[5].location = 5;
+  vertex_descriptions.vertex_attribute_descriptions[5].format =
+      VK_FORMAT_R32G32_SFLOAT;
+  vertex_descriptions.vertex_attribute_descriptions[5].offset =
+      11 * sizeof(f32);
 
   return vertex_descriptions;
 }
@@ -69,7 +86,7 @@ struct Pipeline {
   Array<VkDescriptorSetLayout, 4> descriptor_set_layouts;
 };
 
-Pipeline create_pipeline(VkRenderPass render_pass)
+Pipeline create_pipeline(Device *device, VkRenderPass render_pass)
 {
   Pipeline pipeline;
 
@@ -178,22 +195,43 @@ Pipeline create_pipeline(VkRenderPass render_pass)
   push_constant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
   {
+    Array<VkDescriptorBindingFlags, 1> binding_flags = {
+        VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT};
+    VkDescriptorSetLayoutBindingFlagsCreateInfoEXT extended_info{};
+    extended_info.sType =
+        VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT;
+    extended_info.pNext         = nullptr;
+    extended_info.bindingCount  = binding_flags.size;
+    extended_info.pBindingFlags = binding_flags.data;
+
     VkDescriptorSetLayoutBinding sampler_layout_binding{};
     sampler_layout_binding.binding         = 0;
-    sampler_layout_binding.descriptorCount = 1;
+    sampler_layout_binding.descriptorCount = 1000;
     sampler_layout_binding.descriptorType =
         VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     sampler_layout_binding.pImmutableSamplers = nullptr;
     sampler_layout_binding.stageFlags         = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-    VkDescriptorSetLayoutBinding bindings[] = {sampler_layout_binding};
+    VkDescriptorSetLayoutBinding buffer_layout_binding{};
+    buffer_layout_binding.binding         = 1;
+    buffer_layout_binding.descriptorCount = 1;
+    buffer_layout_binding.descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    buffer_layout_binding.pImmutableSamplers = nullptr;
+    buffer_layout_binding.stageFlags =
+        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    VkDescriptorSetLayoutBinding bindings[] = {sampler_layout_binding,
+                                               buffer_layout_binding};
     VkDescriptorSetLayoutCreateInfo layout_info{};
     layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layout_info.bindingCount = 1;
+    layout_info.flags =
+        VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT;
+    layout_info.bindingCount = 2;
     layout_info.pBindings    = bindings;
+    layout_info.pNext        = &extended_info;
 
     VkDescriptorSetLayout descriptor_set_layout;
-    if (vkCreateDescriptorSetLayout(vk.device, &layout_info, nullptr,
+    if (vkCreateDescriptorSetLayout(device->device, &layout_info, nullptr,
                                     &descriptor_set_layout) != VK_SUCCESS) {
       fatal("failed to create descriptor set layout!");
     }
@@ -208,19 +246,19 @@ Pipeline create_pipeline(VkRenderPass render_pass)
   pipeline_layout_info.pushConstantRangeCount = 1;
   pipeline_layout_info.pPushConstantRanges    = &push_constant;
 
-  if (vkCreatePipelineLayout(vk.device, &pipeline_layout_info, nullptr,
+  if (vkCreatePipelineLayout(device->device, &pipeline_layout_info, nullptr,
                              &pipeline.layout) != VK_SUCCESS) {
     fatal("failed to create pipeline layout!");
   }
 
   Temp tmp;
-  File vert_shader_file = read_file("shaders/basic/vert.spv", &tmp);
-  File frag_shader_file = read_file("shaders/basic/frag.spv", &tmp);
+  File vert_shader_file = read_file("shaders/dui/vert.spv", &tmp);
+  File frag_shader_file = read_file("shaders/dui/frag.spv", &tmp);
 
   VkShaderModule vert_shader_module =
-      create_shader_module(vk.device, vert_shader_file);
+      create_shader_module(device->device, vert_shader_file);
   VkShaderModule frag_shader_module =
-      create_shader_module(vk.device, frag_shader_file);
+      create_shader_module(device->device, frag_shader_file);
 
   VkPipelineShaderStageCreateInfo vert_shader_stage_info{};
   vert_shader_stage_info.sType =
@@ -260,33 +298,34 @@ Pipeline create_pipeline(VkRenderPass render_pass)
   pipeline_info.basePipelineHandle = VK_NULL_HANDLE;  // Optional
   pipeline_info.basePipelineIndex  = -1;              // Optional
 
-  if (vkCreateGraphicsPipelines(vk.device, VK_NULL_HANDLE, 1, &pipeline_info,
-                                nullptr, &pipeline.ref) != VK_SUCCESS) {
+  if (vkCreateGraphicsPipelines(device->device, VK_NULL_HANDLE, 1,
+                                &pipeline_info, nullptr,
+                                &pipeline.ref) != VK_SUCCESS) {
     fatal("failed to create graphics pipeline!");
   }
 
-  vkDestroyShaderModule(vk.device, vert_shader_module, nullptr);
-  vkDestroyShaderModule(vk.device, frag_shader_module, nullptr);
+  vkDestroyShaderModule(device->device, vert_shader_module, nullptr);
+  vkDestroyShaderModule(device->device, frag_shader_module, nullptr);
 
   return pipeline;
 }
 
-void destroy_pipeline(Pipeline pipeline)
+void destroy_pipeline(Device *device, Pipeline pipeline)
 {
-  vkDestroyPipeline(vk.device, pipeline.ref, nullptr);
-  vkDestroyPipelineLayout(vk.device, pipeline.layout, nullptr);
+  vkDestroyPipeline(device->device, pipeline.ref, nullptr);
+  vkDestroyPipelineLayout(device->device, pipeline.layout, nullptr);
 }
 
-VkDescriptorSet create_descriptor_set(Pipeline pipeline)
+VkDescriptorSet create_descriptor_set(Device *device, Pipeline pipeline)
 {
   VkDescriptorSetAllocateInfo allocInfo{};
   allocInfo.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-  allocInfo.descriptorPool     = vk.descriptor_pool;
+  allocInfo.descriptorPool     = device->descriptor_pool;
   allocInfo.descriptorSetCount = 1;
   allocInfo.pSetLayouts        = pipeline.descriptor_set_layouts.data;
 
   VkDescriptorSet descriptor_set;
-  if (vkAllocateDescriptorSets(vk.device, &allocInfo, &descriptor_set) !=
+  if (vkAllocateDescriptorSets(device->device, &allocInfo, &descriptor_set) !=
       VK_SUCCESS) {
     fatal("failed to allocate descriptor sets!");
   }
@@ -294,74 +333,74 @@ VkDescriptorSet create_descriptor_set(Pipeline pipeline)
   return descriptor_set;
 }
 
-void start_command_buffer(Pipeline pipeline)
+void start_command_buffer(Device *device, Pipeline pipeline)
 {
-  vkResetCommandBuffer(vk.command_buffer, 0);
+  vkResetCommandBuffer(device->command_buffer, 0);
 
   VkCommandBufferBeginInfo begin_info{};
   begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
-  if (vkBeginCommandBuffer(vk.command_buffer, &begin_info) != VK_SUCCESS) {
+  if (vkBeginCommandBuffer(device->command_buffer, &begin_info) != VK_SUCCESS) {
     fatal("failed to begin recording command buffer!");
   }
 
   VkRenderPassBeginInfo render_pass_info{};
   render_pass_info.sType      = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-  render_pass_info.renderPass = vk.render_pass;
+  render_pass_info.renderPass = device->render_pass;
   render_pass_info.framebuffer =
-      vk.swap_chain_framebuffers[vk.current_image_index];
+      device->swap_chain_framebuffers[device->current_image_index];
   render_pass_info.renderArea.offset = {0, 0};
-  render_pass_info.renderArea.extent = vk.swap_chain_extent;
+  render_pass_info.renderArea.extent = device->swap_chain_extent;
 
   VkClearValue clear_color         = {{{0.1f, 0.1f, 0.1f, 1.0f}}};
   render_pass_info.clearValueCount = 1;
   render_pass_info.pClearValues    = &clear_color;
 
-  vkCmdBeginRenderPass(vk.command_buffer, &render_pass_info,
+  vkCmdBeginRenderPass(device->command_buffer, &render_pass_info,
                        VK_SUBPASS_CONTENTS_INLINE);
 
-  vkCmdBindPipeline(vk.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+  vkCmdBindPipeline(device->command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     pipeline.ref);
 
   VkViewport viewport{};
   viewport.x        = 0.0f;
   viewport.y        = 0.0f;
-  viewport.width    = (f32)vk.swap_chain_extent.width;
-  viewport.height   = (f32)vk.swap_chain_extent.height;
+  viewport.width    = (f32)device->swap_chain_extent.width;
+  viewport.height   = (f32)device->swap_chain_extent.height;
   viewport.minDepth = 0.0f;
   viewport.maxDepth = 1.0f;
-  vkCmdSetViewport(vk.command_buffer, 0, 1, &viewport);
+  vkCmdSetViewport(device->command_buffer, 0, 1, &viewport);
 
   VkRect2D scissor{};
   scissor.offset = {0, 0};
-  scissor.extent = vk.swap_chain_extent;
-  vkCmdSetScissor(vk.command_buffer, 0, 1, &scissor);
+  scissor.extent = device->swap_chain_extent;
+  vkCmdSetScissor(device->command_buffer, 0, 1, &scissor);
 }
 
-void end_command_buffer()
+void end_command_buffer(Device *device)
 {
-  vkCmdEndRenderPass(vk.command_buffer);
+  vkCmdEndRenderPass(device->command_buffer);
 
-  if (vkEndCommandBuffer(vk.command_buffer) != VK_SUCCESS) {
+  if (vkEndCommandBuffer(device->command_buffer) != VK_SUCCESS) {
     fatal("failed to record command buffer!");
   }
 }
 
-void start_frame(Pipeline pipeline)
+void start_frame(Device *device, Pipeline pipeline)
 {
-  vkWaitForFences(vk.device, 1, &in_flight_fence, VK_TRUE, UINT64_MAX);
-  vkResetFences(vk.device, 1, &in_flight_fence);
+  vkWaitForFences(device->device, 1, &in_flight_fence, VK_TRUE, UINT64_MAX);
+  vkResetFences(device->device, 1, &in_flight_fence);
 
-  vkAcquireNextImageKHR(vk.device, vk.swap_chain, UINT64_MAX,
+  vkAcquireNextImageKHR(device->device, device->swap_chain, UINT64_MAX,
                         image_available_semaphore, VK_NULL_HANDLE,
-                        &vk.current_image_index);
+                        &device->current_image_index);
 
-  start_command_buffer(pipeline);
+  start_command_buffer(device, pipeline);
 }
 
-void end_frame()
+void end_frame(Device *device)
 {
-  end_command_buffer();
+  end_command_buffer(device);
 
   VkSubmitInfo submitInfo{};
   submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -374,13 +413,13 @@ void end_frame()
   submitInfo.pWaitDstStageMask  = waitStages;
 
   submitInfo.commandBufferCount = 1;
-  submitInfo.pCommandBuffers    = &vk.command_buffer;
+  submitInfo.pCommandBuffers    = &device->command_buffer;
 
   VkSemaphore signal_semaphores[] = {render_finished_semaphore};
   submitInfo.signalSemaphoreCount = 1;
   submitInfo.pSignalSemaphores    = signal_semaphores;
 
-  if (vkQueueSubmit(vk.graphics_queue, 1, &submitInfo, in_flight_fence) !=
+  if (vkQueueSubmit(device->graphics_queue, 1, &submitInfo, in_flight_fence) !=
       VK_SUCCESS) {
     fatal("failed to submit draw command buffer!");
   }
@@ -391,35 +430,58 @@ void end_frame()
   present_info.waitSemaphoreCount = 1;
   present_info.pWaitSemaphores    = signal_semaphores;
 
-  VkSwapchainKHR swapChains[] = {vk.swap_chain};
+  VkSwapchainKHR swapChains[] = {device->swap_chain};
   present_info.swapchainCount = 1;
   present_info.pSwapchains    = swapChains;
-  present_info.pImageIndices  = &vk.current_image_index;
+  present_info.pImageIndices  = &device->current_image_index;
   present_info.pResults       = nullptr;  // Optional
 
-  VkResult present_result = vkQueuePresentKHR(vk.graphics_queue, &present_info);
+  VkResult present_result =
+      vkQueuePresentKHR(device->graphics_queue, &present_info);
   if (present_result == VK_ERROR_OUT_OF_DATE_KHR ||
       present_result == VK_SUBOPTIMAL_KHR) {
-    recreate_swap_chain();
+    recreate_swap_chain(device);
   }
 }
 
-void bind_descriptor_set(Pipeline pipeline, VkDescriptorSet descriptor_set)
+void bind_descriptor_set(Device *device, Pipeline pipeline,
+                         VkDescriptorSet descriptor_set)
 {
-  vkCmdBindDescriptorSets(vk.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          pipeline.layout, 0, 1, &descriptor_set, 0, nullptr);
+  vkCmdBindDescriptorSets(device->command_buffer,
+                          VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.layout, 0,
+                          1, &descriptor_set, 0, nullptr);
 }
 
-void push_constant(Pipeline pipeline, void *data, u32 size)
+void push_constant(Device *device, Pipeline pipeline, void *data, u32 size)
 {
-  vkCmdPushConstants(vk.command_buffer, pipeline.layout,
+  vkCmdPushConstants(device->command_buffer, pipeline.layout,
                      VK_SHADER_STAGE_VERTEX_BIT, 0, size, data);
 }
 
-void set_scissor(Rect rect)
+void set_scissor(Device *device, Rect rect)
 {
   VkRect2D scissor{};
   scissor.offset = {(i32)rect.x, (i32)rect.y};
   scissor.extent = {(u32)rect.width, (u32)rect.height};
-  vkCmdSetScissor(vk.command_buffer, 0, 1, &scissor);
+  vkCmdSetScissor(device->command_buffer, 0, 1, &scissor);
+}
+
+void bind_storage_buffer(Device *device, VkDescriptorSet descriptor_set,
+                         Buffer buffer, u32 binding)
+{
+  VkDescriptorBufferInfo buffer_info{};
+  buffer_info.buffer = buffer.ref;
+  buffer_info.offset = 0;
+  buffer_info.range  = MB;
+
+  VkWriteDescriptorSet descriptor_write{};
+  descriptor_write.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  descriptor_write.dstSet          = descriptor_set;
+  descriptor_write.dstBinding      = binding;
+  descriptor_write.dstArrayElement = 0;
+  descriptor_write.descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+  descriptor_write.descriptorCount = 1;
+  descriptor_write.pBufferInfo     = &buffer_info;
+
+  vkUpdateDescriptorSets(device->device, 1, &descriptor_write, 0, nullptr);
 }

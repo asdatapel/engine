@@ -8,7 +8,7 @@ struct StaticPool {
     bool assigned;
     union {
       T value = {};
-      Element *next;
+      u64 next;
     };
 
     ~Element()
@@ -19,16 +19,23 @@ struct StaticPool {
 
   const static u64 SIZE = CAPACITY;
   Element elements[SIZE];
-  Element *next = nullptr, *last = nullptr;
+  u64 next = 0, last = 0;
 
   StaticPool()
   {
-    next = elements;
+    next = 0;
     last = next;
 
     for (u64 i = 0; i < SIZE; i++) {
       remove(i);
     }
+  }
+
+  void operator=(StaticPool<T, CAPACITY> &other)
+  {
+    memcpy(elements, other.elements, SIZE * sizeof(Element));
+    next = other.next;
+    last = other.last;
   }
 
   bool exists(u64 i) { return elements[i].assigned; }
@@ -45,7 +52,7 @@ struct StaticPool {
 
   T *push_back(T value)
   {
-    Element *current = next;
+    Element *current = &elements[next];
     if (!current) return nullptr;
 
     next              = current->next;
@@ -56,7 +63,7 @@ struct StaticPool {
 
   T *emplace(T value, u64 index)
   {
-    if (next == &elements[index]) {
+    if (next == index) {
       next = elements[index].next;
     }
     elements[index].value    = value;
@@ -65,23 +72,21 @@ struct StaticPool {
     return &elements[index].value;
   }
 
-  T *emplace_wrapped(u64 index, T value) { return emplace(value, index % SIZE); }
-
-  void remove(Element *elem)
+  T *emplace_wrapped(u64 index, T value)
   {
-    elem->assigned = false;
-    elem->next     = nullptr;
-    last->next     = elem;
-    last           = elem;
+    return emplace(value, index % SIZE);
   }
+
+  void remove(Element *elem) { remove(index_of(&elem->value)) }
 
   void remove(u64 i)
   {
     Element *elem  = &elements[i];
     elem->assigned = false;
-    elem->next     = nullptr;
-    last->next     = elem;
-    last           = elem;
+    elem->next     = 0;
+
+    elements[last].next = i;
+    last                = i;
   }
 
   u64 index_of(T *ptr) { return ((Element *)ptr - elements); }

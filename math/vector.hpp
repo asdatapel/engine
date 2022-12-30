@@ -192,7 +192,21 @@ Vec3<T> max(Vec3<T> a, Vec3<T> b)
   return {fmaxf(a.x, b.x), fmaxf(a.y, b.y), fmaxf(a.z, b.z)};
 }
 
+template <typename T>
+struct Vec4 {
+  union {
+    struct {
+      T x, y, z, w;
+    };
+    T values[4];
+  };
+
+  float len() { return sqrt(x * x + y * y + z * z + w * w); }
+  float operator[](i32 i) { return values[i]; }
+};
+
 typedef Vec2<i32> Vec2i;
 typedef Vec2<f32> Vec2f;
 typedef Vec2<b8> Vec2b;
 typedef Vec3<f32> Vec3f;
+typedef Vec4<f32> Vec4f;

@@ -1,11 +1,3 @@
-#include "input.hpp"
-#include "gpu/vulkan/pipeline.hpp"
-
-#include "api.hpp"
-
-void init_plugin();
-void reload();
-
-
+#include "dui/dui.hpp"
 
 int main() {}

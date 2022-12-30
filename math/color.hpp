@@ -13,6 +13,15 @@ struct Color {
   }
 };
 
+u32 color_to_int(Color c)
+{
+  u32 r = (u32)(c.r * 255) & 0xFF;
+  u32 g = (u32)(c.g * 255) & 0xFF;
+  u32 b = (u32)(c.b * 255) & 0xFF;
+  u32 a = (u32)(c.a * 255) & 0xFF;
+  return (r << 24) | (g << 16) | (b << 8) | (a);
+}
+
 // http://marcocorvi.altervista.org/games/imgpr/rgb-hsl.htm
 Color rgb_to_hsl(Color in)
 {
