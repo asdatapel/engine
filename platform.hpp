@@ -24,6 +24,8 @@ struct VulkanExtensions {
 struct GlfwWindow {
   GLFWwindow *ref = nullptr;
 
+  Vec2f size;
+
   void init()
   {
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -39,8 +41,14 @@ struct GlfwWindow {
   }
 
   Vec2f get_size() {
-    Vec2i size;
-    glfwGetWindowSize(ref, &size.x, &size.y);
+    Vec2i new_size;
+    glfwGetWindowSize(ref, &new_size.x, &new_size.y);
+
+    // glfw says windows size is 0 when its minimized
+    if (new_size.x != 0 && new_size.y != 0) {
+      size.x = new_size.x;
+      size.y = new_size.y;
+    }
 
     return size;
   }

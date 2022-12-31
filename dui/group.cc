@@ -48,7 +48,7 @@ Rect Group::get_tabs_rect()
   Rect tabs_rect;
   tabs_rect.x      = titlebar_content_rect.x + WINDOW_CONTROL_WIDTH;
   tabs_rect.y      = titlebar_content_rect.y;
-  tabs_rect.width  = titlebar_content_rect.width - (WINDOW_CONTROL_WIDTH * 2);
+  tabs_rect.width  = titlebar_content_rect.width - WINDOW_CONTROL_WIDTH;
   tabs_rect.height = titlebar_content_rect.height + WINDOW_MARGIN_SIZE;
 
   return tabs_rect;

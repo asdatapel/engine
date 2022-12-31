@@ -58,7 +58,7 @@ struct VectorFont {
 
 Glyph extract_glyph(VectorFont* font, FT_Face face, u32 character)
 {
-  FT_Error err = FT_Set_Pixel_Sizes(face, 0, 32);
+  FT_Error err = FT_Set_Pixel_Sizes(face, 0, 16);
   if (err) {
     fatal("failed to set pixel size?");
   }
@@ -73,11 +73,11 @@ Glyph extract_glyph(VectorFont* font, FT_Face face, u32 character)
   FT_Outline outline = face->glyph->outline;
 
   Glyph glyph;
-  glyph.size    = Vec2f((f32)face->glyph->metrics.width / face->height,
-                        (f32)face->glyph->metrics.height / face->height);
-  glyph.bearing = Vec2f((f32)face->glyph->metrics.horiBearingX / face->height,
-                        (f32)face->glyph->metrics.horiBearingY / face->height);
-  glyph.advance = (f32)face->glyph->advance.x / face->height;
+  glyph.size    = Vec2f((f32)face->glyph->metrics.width / face->size->metrics.height,
+                        (f32)face->glyph->metrics.height / face->size->metrics.height);
+  glyph.bearing = Vec2f((f32)face->glyph->metrics.horiBearingX / face->size->metrics.height,
+                        (f32)face->glyph->metrics.horiBearingY / face->size->metrics.height);
+  glyph.advance = (f32)face->glyph->advance.x / face->size->metrics.height;
 
   glyph.curve_start_idx = font->curves.size;
   glyph.curve_count     = 0;
@@ -94,10 +94,10 @@ Glyph extract_glyph(VectorFont* font, FT_Face face, u32 character)
     while (point_i <= contour_end) {
       auto get_pos = [&](FT_Vector ft_vec) {
         f32 x = ((f32)ft_vec.x - face->glyph->metrics.horiBearingX) /
-                face->glyph->metrics.width;
+                face->glyph->metrics.width * .98 + .01;
         f32 y = ((f32)ft_vec.y + (face->glyph->metrics.height -
                                   face->glyph->metrics.horiBearingY)) /
-                face->glyph->metrics.height;
+                face->glyph->metrics.height * .98 + .01;
 
         return Vec2f(x, y);
       };

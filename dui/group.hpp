@@ -9,7 +9,7 @@ const f32 TITLEBAR_HEIGHT               = 32;
 const f32 TITLEBAR_BOTTOM_BORDER_HEIGHT = 3.f;
 const f32 TAB_MARGIN                    = 3.f;
 const f32 WINDOW_BORDER_SIZE            = 2.f;
-const f32 WINDOW_CONTROL_WIDTH          = 20.f;
+const f32 WINDOW_CONTROL_WIDTH          = 10.f;
 const f32 WINDOW_MARGIN_SIZE            = 4.f;
 const f32 SCROLLBAR_WIDTH               = 8.f;
 const f32 DOCK_CONTROLS_WIDTH           = 100.f;
@@ -51,7 +51,7 @@ struct Group {
   GroupId parent = -1;
 
   Rect rect;
-  Vec2f span_before_snap;
+  Vec2f span_before_snap = {0, 0};
 
   // can change frame to frame
   DrawList *dl;

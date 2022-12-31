@@ -54,7 +54,7 @@ void main() {
         out_rect_positive_extents = rect_positive_extents;
         out_position = verts[corner];
         out_rect_center = rect_center;
-        out_rect_corner_radius = r.corner_radius;
+        out_rect_corner_radius = r.corner_radius * smoothstep(0, 1, r.corner_mask & (1 << corner));
         out_clip_rect_bounds = vec4(clip.rect.x, clip.rect.y, clip.rect.x + clip.rect.z, clip.rect.y + clip.rect.w);
     } else if (out_primitive_type == TEXTURE_RECT) {
         TextureRectPrimitive p = primitives.texture_rects[primitive_idx];
@@ -110,16 +110,16 @@ void main() {
 
         uint corner = (gl_VertexIndex >> 16) & 0x3;
         vec2 verts[] = {
-            {p.dimensions.x, p.dimensions.y},
-            {p.dimensions.x + p.dimensions.z, p.dimensions.y},
-            {p.dimensions.x,  p.dimensions.y + p.dimensions.w},
-            {p.dimensions.x + p.dimensions.z,  p.dimensions.y + p.dimensions.w},
+            {p.dimensions.x - 1 , p.dimensions.y - 1},
+            {p.dimensions.x + p.dimensions.z + 1, p.dimensions.y - 1},
+            {p.dimensions.x - 1,  p.dimensions.y + p.dimensions.w + 1},
+            {p.dimensions.x + p.dimensions.z + 1,  p.dimensions.y + p.dimensions.w + 1},
         };
         vec2 uvs[] = {
-            {0, 1},
-            {1, 1},
-            {0, 0},
-            {1, 0},
+            {-(1 / p.dimensions.z),       1 + (1 / p.dimensions.w)},
+            {1 + (1 / p.dimensions.z),   1 + (1 / p.dimensions.w)},
+            {-(1 / p.dimensions.z),     -(1 / p.dimensions.w)},
+            {1 + (1 / p.dimensions.z), -(1 / p.dimensions.w)},
         };
 
         gl_Position = vec4(verts[corner] / push_constants.canvas_size * vec2(2, 2) - vec2(1, 1), 0, 1);

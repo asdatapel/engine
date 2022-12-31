@@ -34,7 +34,7 @@ struct RoundedRectPrimitive {
   u32 clip_rect_idx;
   u32 color;
   f32 corner_radius;
-  f32 pad;
+  u32 corner_mask;
 };
 
 struct TextureRectPrimitive {
@@ -236,17 +236,28 @@ void push_draw_call(DrawList *dl, i32 tri_count)
   dl->draw_call_count++;
 }
 
+enum CornerMask : u32 {
+  TOP_LEFT     = 0b0001,
+  TOP_RIGHT    = 0b0010,
+  BOTTOM_LEFT  = 0b0100,
+  BOTTOM_RIGHT = 0b1000,
+  TOP          = TOP_LEFT | TOP_RIGHT,
+  BOTTOM       = BOTTOM_LEFT | BOTTOM_RIGHT,
+  ALL          = TOP | BOTTOM,
+};
 u32 push_primitive_rounded_rect(GlobalDrawListData *gdld, Rect rect,
-                                Color color, f32 corner_radius)
+                                Color color, f32 corner_radius, u32 corner_mask)
 {
   gdld->primitives.rounded_rects[gdld->rounded_rects_count++] = {
-      rect, gdld->scissor_idxs.top(), color_to_int(color), corner_radius};
+      rect, gdld->scissor_idxs.top(), color_to_int(color), corner_radius,
+      corner_mask};
 
   return gdld->rounded_rects_count - 1;
 }
 
 void push_rounded_rect(DrawList *dl, GlobalDrawListData *gdld, Rect rect,
-                       f32 corner_radius, Color color)
+                       f32 corner_radius, Color color,
+                       u32 corner_mask = CornerMask::ALL)
 {
   auto push_rect_vert = [](DrawList *dl, u32 primitive_index, u8 corner) {
     dl->verts[dl->vert_count++] = {(u32)PrimitiveIds::ROUNDED_RECT |
@@ -257,8 +268,8 @@ void push_rounded_rect(DrawList *dl, GlobalDrawListData *gdld, Rect rect,
     return;
   }
 
-  u32 primitive_idx =
-      push_primitive_rounded_rect(gdld, rect, color, corner_radius);
+  u32 primitive_idx = push_primitive_rounded_rect(gdld, rect, color,
+                                                  corner_radius, corner_mask);
 
   push_rect_vert(dl, primitive_idx, 0);
   push_rect_vert(dl, primitive_idx, 1);

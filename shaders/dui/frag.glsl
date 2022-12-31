@@ -32,7 +32,7 @@ float clip(vec2 position, vec4 clip_rect_bounds) {
     return axes_in_bounds.x * axes_in_bounds.y;
 }
 
-vec2 rotate (vec2 p, float cos_theta, float sin_theta) {
+vec2 rotate(vec2 p, float cos_theta, float sin_theta) {
   vec2 p2;
   p2.x = p.x * cos_theta - p.y * sin_theta;
   p2.y = p.x * sin_theta + p.y * cos_theta;
@@ -105,8 +105,8 @@ void main() {
       
       if (in_rect_corner_radius > 0) {
           float dist = distance_from_rect(in_position, in_rect_center, in_rect_positive_extents, in_rect_corner_radius);
-          float color = 1 - smoothstep(-1, 0, dist / 2);
-          out_color.a = color * out_color.a;
+          float aa = 1 - smoothstep(-1, 0, dist);
+          out_color.a = aa * out_color.a;
       }
 
       out_color.a *= clip(in_position, in_clip_rect_bounds);
@@ -120,21 +120,27 @@ void main() {
     } else if (in_primitive_type == VECTOR_GLYPH) {
       VectorGlyphPrimitive glyph = primitives.vector_glyphs[in_primitive_idx];
 
-      float inverse_width =fwidth(in_uv).x;
+      float inverse_width = (fwidth(in_uv).x + fwidth(in_uv).y) / 2;
+      float inverse_height = fwidth(in_uv).y;
 
       int n_samples = 16;
       float coverage  = 0.f;
       for (int curve_i = 0; curve_i < glyph.curve_count; curve_i++) {
-        float this_curve_coverage = 0;
-
         for (int s = 0; s < n_samples; s++) {
           ConicCurvePrimitive curve = primitives.conic_curves[glyph.curve_start_idx + curve_i];
 
-          float angle = s * 2 * 3.1415 / n_samples;
+          float angle = s * 3.1415 / (n_samples);
 
           coverage += compute_coverage(curve, in_uv, angle, inverse_width) /
                       n_samples;
         }
+
+        
+        // ConicCurvePrimitive curve = primitives.conic_curves[glyph.curve_start_idx + curve_i];
+        // coverage += compute_coverage(curve, in_uv, 0, inverse_width) /
+        //             2;
+        // coverage += compute_coverage(curve, in_uv, -3.1415 / 2, inverse_height) /
+        //             2;
       }
       out_color = vec4(in_color.rgb, in_color.a * coverage);
       out_color.a *= clip(in_position, in_clip_rect_bounds);

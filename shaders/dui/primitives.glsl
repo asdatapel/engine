@@ -5,16 +5,16 @@ const uint TEXTURE_RECT = 3 << 18;
 const uint BITMAP_GLYPH = 4 << 18;
 const uint VECTOR_GLYPH = 5 << 18;
 
-
 struct RectPrimitive {
   vec4 rect;
 };
 
 struct RoundedRectPrimitive {
-    vec4 dimensions;
-    uint clip_rect_idx;
-    uint color;
-    float corner_radius;
+  vec4 dimensions;
+  uint clip_rect_idx;
+  uint color;
+  float corner_radius;
+  uint corner_mask;
 };
 
 struct TextureRectPrimitive {
@@ -25,10 +25,10 @@ struct TextureRectPrimitive {
 };
 
 struct BitmapGlyphPrimitive {
-    vec4 dimensions;
-    vec4 uv_bounds;
-    uint clip_rect_idx;
-    uint color;
+  vec4 dimensions;
+  vec4 uv_bounds;
+  uint clip_rect_idx;
+  uint color;
 };
 
 struct ConicCurvePrimitive {

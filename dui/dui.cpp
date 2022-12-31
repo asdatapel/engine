@@ -21,7 +21,7 @@ Color highlight = Color::from_int(0xF98125);
 Color d_dark  = Color::from_int(0x011f4b);  //{0, 0.13725, 0.27843, 1};
 Color d       = Color::from_int(0x03396c);  //{0, 0.2, 0.4, 1};
 Color d_light = Color::from_int(0x005b96);  //{0, 0.24706, 0.4902, 1};
-Color l_light = Color::from_int(0x19578a);  // {1, 0.55686, 0, 1};
+Color l_light = Color::from_int(0x19578a);  //{1, 0.55686, 0, 1};
 Color l       = Color::from_int(0x2F70AF);  //{0.99216, 0.46667, 0.00784, 1};
 Color l_dark  = Color::from_int(0x003e71);  //{1, 0.31373, 0.01176, 1};
 
@@ -114,28 +114,6 @@ b8 do_dragging(DuiId id)
   return s.is_dragging(id);
 }
 
-b8 do_dragging_but_only_start_if(DuiId id, b8 condition)
-{
-  // TODO handle left and right mouse buttons
-
-  const f32 drag_start_distance = 2.f;
-
-  const b8 active = s.is_active(id);
-  if (active) {
-    if (condition && (s.input->mouse_pos - s.start_position_active).len() >
-                         drag_start_distance) {
-      s.set_dragging(id);
-    }
-    s.dragging_total_delta = s.input->mouse_pos - s.start_position_active;
-    s.dragging_frame_delta = s.input->mouse_pos_delta;
-  } else {
-    s.clear_dragging(id);
-  }
-
-  s.was_last_control_dragging = s.is_dragging(id);
-  return s.is_dragging(id);
-}
-
 }  // namespace Dui
 
 namespace Dui
@@ -154,7 +132,6 @@ b8 is_empty(Group *g) { return g->id == s.empty_group; }
 
 void add_root_group(Group *g)
 {
-  // sanity check
   assert(get_group_z(g) == -1);
 
   i32 index = s.root_groups.insert(0, g->id);
@@ -263,9 +240,9 @@ void propagate_groups(Group *g, GroupId root = -1, Group *parent = nullptr)
     }
   } else {
     for (i32 i = 0; i < g->windows.size; i++) {
-      Container *w = get_container(g->windows[i]);
-      w->parent    = g->id;
-      w->rect      = g->get_window_rect();
+      Container *c = get_container(g->windows[i]);
+      c->parent    = g->id;
+      c->rect      = g->get_window_rect();
     }
   }
 }
@@ -325,8 +302,6 @@ void resize_border_splits_and_propagate(Group *g, f32 pct_change, i32 axis,
   }
 };
 
-// FIXME parent_window and unparent_window do too much. parent should only
-// parent and unparent should only unparent.
 void parent_window(Group *g, DuiId window_id)
 {
   Container *w = &s.containers.wrapped_get(window_id);
@@ -572,6 +547,11 @@ void combine_leaf_groups(Group *target, Group *src)
 // input group might get destroyed, so returns the new one
 Group *handle_dragging_group(Group *g, DuiId id)
 {
+  // some controls might overlap, so this tracks whether we've already found a
+  // control we're on top of. This means controls need to be evaluated in order
+  // of priority.
+  b8 already_found_hot = false;
+
   // _pos = 0 for left/top, 1 for middle, 2 for right/bottom
   auto snap_in_rect = [](Vec2f span, Rect container, i32 x_pos,
                          i32 y_pos) -> Rect {
@@ -599,15 +579,15 @@ Group *handle_dragging_group(Group *g, DuiId id)
   };
 
   auto do_snap_control = [](DuiId control_id, DuiId dragging_id, Rect rect,
-                            Group *g, Group *target_group, i32 axis,
-                            b8 dir) -> b8 {
+                            Group *g, Group *target_group, i32 axis, b8 dir,
+                            b8 already_found_hot) -> b8 {
     DuiId hot = do_hot(control_id, rect);
     if (hot)
       push_rect(&s.forground_dl, &s.gdld, rect, l_dark);
     else
       push_rect(&s.forground_dl, &s.gdld, rect, l);
 
-    if (hot) {
+    if (hot && !already_found_hot) {
       Rect preview_rect = target_group->rect;
       if (axis == 0) {
         preview_rect.height /= 2;
@@ -620,12 +600,11 @@ Group *handle_dragging_group(Group *g, DuiId id)
       push_rect(&s.forground_dl, &s.gdld, preview_rect,
                 {1, 1, 1, .5});  // preview
       if (s.just_stopped_being_dragging == dragging_id) {
-        snap_group(g, target_group, axis, dir);
-        return true;
+        s.snap_group_to_snap = {true, g->id, target_group->id, axis, dir};
       }
     }
 
-    return false;
+    return hot;
   };
 
   if (s.fullscreen_group == g->id) return g;
@@ -639,15 +618,20 @@ Group *handle_dragging_group(Group *g, DuiId id)
     dock_controls_width = fminf(dock_controls_width, window_rect.width * .75f);
     dock_controls_width = fminf(dock_controls_width, window_rect.height * .75f);
 
-    f32 three_fifth_dock_controls_width = dock_controls_width / 2.f;
-    f32 fifth_dock_controls_width       = dock_controls_width / 5.f;
-    Vec2f horizontal_button_span        = {three_fifth_dock_controls_width,
-                                           fifth_dock_controls_width};
-    Vec2f vertical_button_span          = {fifth_dock_controls_width,
-                                           three_fifth_dock_controls_width};
+    f32 half_controls_width       = dock_controls_width / 2.f;
+    f32 fifth_dock_controls_width = dock_controls_width / 5.f;
+    Vec2f horizontal_button_span  = {half_controls_width,
+                                     fifth_dock_controls_width};
+    Vec2f vertical_button_span    = {fifth_dock_controls_width,
+                                     half_controls_width};
 
     if (target_group->root != target_group->id) {
-      Rect root_window_rect = target_group->root.get()->get_window_rect();
+      Rect root_window_rect;
+      if (target_group->root == s.fullscreen_group) {
+        root_window_rect = target_group->root.get()->rect;
+      } else {
+        root_window_rect = target_group->root.get()->get_window_rect();
+      }
 
       SUB_ID(left_root_dock_control_id, id);
       SUB_ID(right_root_dock_control_id, id);
@@ -661,19 +645,21 @@ Group *handle_dragging_group(Group *g, DuiId id)
           snap_in_rect(horizontal_button_span, root_window_rect, 1, 0);
       Rect bottom_root_dock_control_rect =
           snap_in_rect(horizontal_button_span, root_window_rect, 1, 2);
-      if (do_snap_control(left_root_dock_control_id, id,
-                          left_root_dock_control_rect, g,
-                          target_group->root.get(), 1, false) ||
-          do_snap_control(right_root_dock_control_id, id,
-                          right_root_dock_control_rect, g,
-                          target_group->root.get(), 1, true) ||
-          do_snap_control(top_root_dock_control_id, id,
-                          top_root_dock_control_rect, g,
-                          target_group->root.get(), 0, false) ||
-          do_snap_control(bottom_root_dock_control_id, id,
-                          bottom_root_dock_control_rect, g,
-                          target_group->root.get(), 0, true)) {
-        return g;
+
+      b8 left_hot = do_snap_control(
+          left_root_dock_control_id, id, left_root_dock_control_rect, g,
+          target_group->root.get(), 1, false, already_found_hot);
+      b8 right_hot = do_snap_control(
+          right_root_dock_control_id, id, right_root_dock_control_rect, g,
+          target_group->root.get(), 1, true, already_found_hot);
+      b8 top_hot = do_snap_control(
+          top_root_dock_control_id, id, top_root_dock_control_rect, g,
+          target_group->root.get(), 0, false, already_found_hot);
+      b8 bottom_hot = do_snap_control(
+          bottom_root_dock_control_id, id, bottom_root_dock_control_rect, g,
+          target_group->root.get(), 0, true, already_found_hot);
+      if (left_hot || right_hot || top_hot || bottom_hot) {
+        already_found_hot = true;
       }
     }
 
@@ -692,45 +678,72 @@ Group *handle_dragging_group(Group *g, DuiId id)
         snap_in_rect(horizontal_button_span, dock_control_rect, 1, 0);
     Rect bottom_dock_control_rect =
         snap_in_rect(horizontal_button_span, dock_control_rect, 1, 2);
-    if (do_snap_control(left_dock_control_id, id, left_dock_control_rect, g,
-                        target_group, 1, false) ||
+
+    b8 left_hot =
+        do_snap_control(left_dock_control_id, id, left_dock_control_rect, g,
+                        target_group, 1, false, already_found_hot);
+    b8 right_hot =
         do_snap_control(right_dock_control_id, id, right_dock_control_rect, g,
-                        target_group, 1, true) ||
-        do_snap_control(top_dock_control_id, id, top_dock_control_rect, g,
-                        target_group, 0, false) ||
+                        target_group, 1, true, already_found_hot);
+    b8 top_hot = do_snap_control(top_dock_control_id, id, top_dock_control_rect,
+                                 g, target_group, 0, false, already_found_hot);
+    b8 bottom_hot =
         do_snap_control(bottom_dock_control_id, id, bottom_dock_control_rect, g,
-                        target_group, 0, true)) {
-      return g;
+                        target_group, 0, true, already_found_hot);
+    if (left_hot || right_hot || top_hot || bottom_hot) {
+      already_found_hot = true;
     }
 
-    // if (target_group == s.fullscreen_group &&
-    //     s.fullscreen_group == s.empty_group &&
-    //     in_rect(s.input->mouse_pos, target_group->get_titlebar_full_rect()))
-    //     {
-    //   push_rect(&s.forground_dl, window_rect, {1, 1, 1, .5});  // preview
-    //   if (s.just_stopped_being_dragging == id) {
-    //     Group *first_leaf_node = g;
-    //     while (!first_leaf_node->is_leaf()) {
-    //       first_leaf_node = first_leaf_node->splits[0].child;
-    //     }
-    //     s.empty_group = first_leaf_node;
+    if (target_group->id == s.empty_group &&
+        s.empty_group.get()->windows.size == 0) {
+      SUB_ID(center_dock_control_id, id);
+      Rect center_dock_control_rect =
+          inset(dock_control_rect, dock_controls_width / 4.f);
 
-    //     free_group(s.fullscreen_group);
-    //     s.fullscreen_group = g;
+      DuiId hot = do_hot(center_dock_control_id, center_dock_control_rect);
+      if (hot)
+        push_rect(&s.forground_dl, &s.gdld, center_dock_control_rect, l_dark);
+      else
+        push_rect(&s.forground_dl, &s.gdld, center_dock_control_rect, l);
 
-    //     // move new fullscreen group to the back
-    //     i32 fullscreen_group_z = get_group_z(g);
-    //     s.root_groups.shift_delete(fullscreen_group_z);
-    //     s.root_groups.push_back(g);
+      if (hot && !already_found_hot) {
+        push_rect(&s.forground_dl, &s.gdld, target_group->rect,
+                  {1, 1, 1, .5});  // preview
+        already_found_hot = true;
 
-    //     return g;
-    //   }
-    // }
+        if (s.just_stopped_being_dragging == id) {
+          Group *empty_group             = s.empty_group.get();
+          empty_group->splits            = g->splits;
+          empty_group->split_axis        = g->split_axis;
+          empty_group->windows           = g->windows;
+          empty_group->active_window_idx = g->active_window_idx;
 
-    if (g->is_leaf() &&
+          propagate_groups(empty_group);
+
+          Group *first_leaf_node = empty_group;
+          while (!first_leaf_node->is_leaf()) {
+            first_leaf_node = first_leaf_node->splits[0].child.get();
+          }
+          s.empty_group = first_leaf_node->id;
+
+          if (empty_group->parent.valid()) {
+            merge_splits(empty_group->parent.get());
+          }
+
+          free_group(g);
+
+          return empty_group;
+        }
+      }
+    }
+
+    if (!already_found_hot && g->is_leaf() &&
+        target_group->id != s.empty_group && target_group->windows.size != 0 &&
         in_rect(s.input->mouse_pos, target_group->get_titlebar_full_rect())) {
-      push_rect(&s.forground_dl, &s.gdld, window_rect,
+      push_rect(&s.forground_dl, &s.gdld, target_group->rect,
                 {1, 1, 1, .5});  // preview
+      already_found_hot = true;
+
       if (s.just_stopped_being_dragging == id) {
         combine_leaf_groups(target_group, g);
 
@@ -771,10 +784,6 @@ void draw_group_and_children(Group *g)
   push_rect(dl, &s.gdld, group_border_rect, d);
   push_rect(dl, &s.gdld, window_rect, d_dark);
 
-  if (is_empty(g)) {
-    push_rect(dl, &s.gdld, titlebar_rect, {1, 0, 0, 1});
-  }
-
   f32 combined_extra_desired_tab_space =
       g->get_combined_extra_desired_tab_space();
   f32 available_extra_tab_space = g->get_available_extra_tab_space();
@@ -786,14 +795,15 @@ void draw_group_and_children(Group *g)
     Vec2f tab_span = g->get_tab_margin_span(
         w_i, combined_extra_desired_tab_space, available_extra_tab_space);
 
-    Rect tab_rect = {tab_pos.x, tab_pos.y, tab_span.x, tab_span.y};
+    Rect tab_rect = {tab_pos.x, tab_pos.y, tab_span.x, tab_span.y + 1.f};
     tab_pos.x += tab_rect.width + TAB_GAP;
 
     Color tab_color = d_dark;
     if (w_i == g->active_window_idx) {
       tab_color = d_light;
     }
-    push_rect(dl, &s.gdld, tab_rect, tab_color);
+
+    push_rounded_rect(dl, &s.gdld, tab_rect, 3.f, tab_color, CornerMask::TOP);
 
     push_scissor(&s.gdld, tab_rect);
     push_vector_text(dl, &s.gdld, w->title,
@@ -805,6 +815,10 @@ void draw_group_and_children(Group *g)
 
 void start_frame_for_leaf(Group *g)
 {
+  if (g->root == g->id) {
+    g->span_before_snap = g->rect.span();
+  }
+
   assert(g->active_window_idx < g->windows.size);
   DuiId active_window_id = g->windows[g->active_window_idx];
 
@@ -829,7 +843,6 @@ void start_frame_for_leaf(Group *g)
         g = handle_dragging_group(g, tab_handle_id);
       } else {
         i32 target_tab_idx = g->get_tab_at_pos(s.input->mouse_pos);
-        DuiId tmp          = g->windows[target_tab_idx];
         g->windows.shift_delete(w_i);
         g->windows.insert(target_tab_idx, w->id);
         g->active_window_idx = target_tab_idx;
@@ -1276,6 +1289,13 @@ void start_frame(Input *input, Vec2f canvas_size)
     clear_draw_list(&s.draw_lists[i]);
   }
 
+  // handle pending changes
+  if (s.snap_group_to_snap.need_to) {
+    snap_group(s.snap_group_to_snap.g.get(), s.snap_group_to_snap.target.get(),
+               s.snap_group_to_snap.axis, s.snap_group_to_snap.dir);
+  }
+  s.snap_group_to_snap.need_to = false;
+
   // figure out the top groups first
   s.top_root_group_at_mouse_pos     = -1;
   i32 top_root_group_at_mouse_pos_z = -1;
@@ -1463,8 +1483,7 @@ b8 button(String text, Vec2f size, Color color, b8 fill = false)
 
   if (hot) color = darken(color, .1f);
 
-  push_rounded_rect(c->parent.get()->root.get()->dl, &s.gdld, rect, 5.f,
-                    color);
+  push_rounded_rect(c->parent.get()->root.get()->dl, &s.gdld, rect, 5.f, color);
   push_rounded_rect(c->parent.get()->root.get()->dl, &s.gdld, inset(rect, 1.5f),
                     5.f, darken(color, .2f));
   push_vector_text_centered(c->parent.get()->root.get()->dl, &s.gdld, text,
@@ -1641,7 +1660,7 @@ void text_input(StaticString<N> *str)
   push_rect(dl, &s.gdld, border_rect, color);
   push_rect(dl, &s.gdld, rect, l_dark);
 
-  push_scissor(&s.gdld, rect);
+  push_scissor(&s.gdld, border_rect);
 
   if (selected && highlight_start_idx != cursor_idx) {
     Rect highlight_rect = {fminf(highlight_start_pos, cursor_pos), rect.y + 3,
@@ -1682,8 +1701,6 @@ API void api_init_dui(Device *device, Pipeline pipeline)
 
   s.empty_group      = create_group(nullptr, {})->id;
   s.fullscreen_group = s.empty_group;
-
-  s.debug = rand() % 100000;
 }
 
 API void api_debug_ui_test(Device *device, Pipeline pipeline, Input *input,
@@ -1729,8 +1746,7 @@ API void api_debug_ui_test(Device *device, Pipeline pipeline, Input *input,
   set_window_color({0.99216, 0.46667, 0.00784, .5});
   if (button("test21", {200, 300}, {1, 1, 1, 0})) info("test1");
   if (button("test2", {150, 100}, {1, 0, 0, 1})) info("test2");
-  if (button("test3", {100, 400}, {1, 1, 0, 1}, true))
-    info("test3");
+  if (button("test3", {100, 400}, {1, 1, 0, 1}, true)) info("test3");
   next_line();
   if (button("test4", {200, 600}, {0, 1, 1, 1})) info("test4");
   next_line();
@@ -1757,7 +1773,7 @@ API void api_debug_ui_test(Device *device, Pipeline pipeline, Input *input,
   set_window_color({.3, .6, .4, .5});
   end_window();
 
-  DuiId w8 = start_window("test8", {100, 100, 800, 800});
+  DuiId w8 = start_window("_", {100, 100, 800, 800});
   static Image image;
   static ImageBuffer image_buf;
   static VkImageView image_view;
@@ -1841,7 +1857,6 @@ API DuiState *api_get_dui_state() { return &s; }
 
 API ReloadData api_get_plugin_reload_data()
 {
-  info("api_get_plugin_reload_data: ", s.debug);
   return {&s};
 }
 API void api_reload_plugin(ReloadData reload_data)
