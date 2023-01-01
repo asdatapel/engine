@@ -31,6 +31,7 @@ struct Container {
   // container.
   i64 last_frame_started = -1;
   i64 last_frame         = -1;
+  
   // total space requested by content last frame. this is whats used to
   // determine free space and stretch controls to bounds.
   Vec2f last_frame_minimum_content_span    = {0, 0};

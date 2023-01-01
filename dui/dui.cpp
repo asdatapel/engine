@@ -33,11 +33,10 @@ b8 do_hot(DuiId id, Rect rect, Group *root_group = nullptr,
           Container *c = nullptr, Rect clip_rect = {})
 {
   b8 is_in_top_group = !s.top_root_group_at_mouse_pos.valid() || !root_group ||
-                       (root_group->id == s.top_root_group_at_mouse_pos &&
-                        in_rect(s.input->mouse_pos, root_group->rect));
+                       (root_group->id == s.top_root_group_at_mouse_pos);
 
   b8 is_in_clip_rect =
-      clip_rect.x == 0 || in_rect(s.input->mouse_pos, clip_rect);
+      clip_rect.width == 0 || in_rect(s.input->mouse_pos, clip_rect);
   b8 is_in_current_window = !c || in_rect(s.input->mouse_pos, c->rect);
   b8 is_hot = is_in_clip_rect && is_in_top_group && is_in_current_window &&
               in_rect(s.input->mouse_pos, rect);
@@ -118,6 +117,13 @@ b8 do_dragging(DuiId id)
 
 namespace Dui
 {
+
+void set_cursor_shape(Platform::CursorShape shape)
+{
+  if (s.cursor_shape == Platform::CursorShape::NORMAL) {
+    s.cursor_shape = shape;
+  }
+}
 
 // -1 if not root
 i32 get_group_z(Group *g)
@@ -333,6 +339,9 @@ Group *unparent_window(DuiId window_id)
 
   Group *g = create_group(nullptr, old_g->rect);
   parent_window(g, window_id);
+
+  g->rect.width  = fminf(g->rect.width / 2, s.canvas_span.x);
+  g->rect.height = fminf(g->rect.height / 2, s.canvas_span.y);
 
   return g;
 }
@@ -738,7 +747,8 @@ Group *handle_dragging_group(Group *g, DuiId id)
     }
 
     if (!already_found_hot && g->is_leaf() &&
-        target_group->id != s.empty_group && target_group->windows.size != 0 &&
+        (target_group->id != s.empty_group ||
+         target_group->windows.size != 0) &&
         in_rect(s.input->mouse_pos, target_group->get_titlebar_full_rect())) {
       push_rect(&s.forground_dl, &s.gdld, target_group->rect,
                 {1, 1, 1, .5});  // preview
@@ -871,8 +881,6 @@ void start_frame_for_leaf(Group *g)
 
 void start_frame_for_group(Group *g)
 {
-  const f32 RESIZE_HANDLES_OVERSIZE = 2.f;
-
   s.cg = g->id;
 
   if (s.fullscreen_group == g->id) {
@@ -905,6 +913,9 @@ void start_frame_for_group(Group *g)
         const f32 MINIMUM_ROOT_WIDTH  = 50.f;
         const f32 MINIMUM_ROOT_HEIGHT = 75.f;
 
+        Vec2f clamped_mouse_pos =
+            clamp(s.input->mouse_pos, Vec2f(0, 0), s.canvas_span);
+
         Rect left_top_handle_rect;
         left_top_handle_rect.x = g->rect.x - RESIZE_HANDLES_OVERSIZE;
         left_top_handle_rect.y = g->rect.y - RESIZE_HANDLES_OVERSIZE;
@@ -912,20 +923,24 @@ void start_frame_for_group(Group *g)
             RESIZE_HANDLES_OVERSIZE + WINDOW_BORDER_SIZE + WINDOW_MARGIN_SIZE;
         left_top_handle_rect.height =
             RESIZE_HANDLES_OVERSIZE + WINDOW_BORDER_SIZE + WINDOW_MARGIN_SIZE;
+
         SUB_ID(left_top_handle_id, g->id.id);
         DuiId left_top_handle_hot =
             do_hot(left_top_handle_id, left_top_handle_rect, g->root.get());
         DuiId left_top_handle_active   = do_active(left_top_handle_id);
         DuiId left_top_handle_dragging = do_dragging(left_top_handle_id);
+
         if (left_top_handle_hot || left_top_handle_dragging) {
-          push_rect(&s.forground_dl, &s.gdld, left_top_handle_rect,
-                    {1, 1, 1, 1});
+          set_cursor_shape(Platform::CursorShape::NWSE_RESIZE);
         }
+
         if (left_top_handle_dragging) {
-          g->rect.x += s.dragging_frame_delta.x;
-          g->rect.y += s.dragging_frame_delta.y;
-          g->rect.width -= s.dragging_frame_delta.x;
-          g->rect.height -= s.dragging_frame_delta.y;
+          Vec2f delta = clamped_mouse_pos - g->rect.xy();
+
+          g->rect.x += delta.x;
+          g->rect.y += delta.y;
+          g->rect.width -= delta.x;
+          g->rect.height -= delta.y;
 
           if (g->rect.width < MINIMUM_ROOT_WIDTH) {
             g->rect.x -= MINIMUM_ROOT_WIDTH - g->rect.width;
@@ -947,18 +962,23 @@ void start_frame_for_group(Group *g)
         right_top_handle_rect.height =
             RESIZE_HANDLES_OVERSIZE + WINDOW_BORDER_SIZE + WINDOW_MARGIN_SIZE;
         SUB_ID(right_top_handle_id, g->id.id);
+
         DuiId right_top_handle_hot =
             do_hot(right_top_handle_id, right_top_handle_rect, g->root.get());
         DuiId right_top_handle_active   = do_active(right_top_handle_id);
         DuiId right_top_handle_dragging = do_dragging(right_top_handle_id);
+
         if (right_top_handle_hot || right_top_handle_dragging) {
-          push_rect(&s.forground_dl, &s.gdld, right_top_handle_rect,
-                    {1, 1, 1, 1});
+          set_cursor_shape(Platform::CursorShape::SWNE_RESIZE);
         }
+
         if (right_top_handle_dragging) {
-          g->rect.width += s.dragging_frame_delta.x;
-          g->rect.y += s.dragging_frame_delta.y;
-          g->rect.height -= s.dragging_frame_delta.y;
+          Vec2f delta =
+              clamped_mouse_pos - Vec2f(g->rect.x + g->rect.width, g->rect.y);
+
+          g->rect.width += delta.x;
+          g->rect.y += delta.y;
+          g->rect.height -= delta.y;
 
           if (g->rect.width < MINIMUM_ROOT_WIDTH) {
             g->rect.width = MINIMUM_ROOT_WIDTH;
@@ -977,19 +997,24 @@ void start_frame_for_group(Group *g)
             RESIZE_HANDLES_OVERSIZE + WINDOW_BORDER_SIZE + WINDOW_MARGIN_SIZE;
         left_bottom_handle_rect.height =
             RESIZE_HANDLES_OVERSIZE + WINDOW_BORDER_SIZE + WINDOW_MARGIN_SIZE;
+
         SUB_ID(left_bottom_handle_id, g->id.id);
         DuiId left_bottom_handle_hot = do_hot(
             left_bottom_handle_id, left_bottom_handle_rect, g->root.get());
         DuiId left_bottom_handle_active   = do_active(left_bottom_handle_id);
         DuiId left_bottom_handle_dragging = do_dragging(left_bottom_handle_id);
+
         if (left_bottom_handle_hot || left_bottom_handle_dragging) {
-          push_rect(&s.forground_dl, &s.gdld, left_bottom_handle_rect,
-                    {1, 1, 1, 1});
+          set_cursor_shape(Platform::CursorShape::SWNE_RESIZE);
         }
+
         if (left_bottom_handle_dragging) {
-          g->rect.x += s.dragging_frame_delta.x;
-          g->rect.width -= s.dragging_frame_delta.x;
-          g->rect.height += s.dragging_frame_delta.y;
+          Vec2f delta =
+              clamped_mouse_pos - Vec2f(g->rect.x, g->rect.y + g->rect.height);
+
+          g->rect.x += delta.x;
+          g->rect.width -= delta.x;
+          g->rect.height += delta.y;
 
           if (g->rect.width < MINIMUM_ROOT_WIDTH) {
             g->rect.x -= MINIMUM_ROOT_WIDTH - g->rect.width;
@@ -1009,19 +1034,25 @@ void start_frame_for_group(Group *g)
             RESIZE_HANDLES_OVERSIZE + WINDOW_BORDER_SIZE + WINDOW_MARGIN_SIZE;
         right_bottom_handle_rect.height =
             RESIZE_HANDLES_OVERSIZE + WINDOW_BORDER_SIZE + WINDOW_MARGIN_SIZE;
+
         SUB_ID(right_bottom_handle_id, g->id.id);
         DuiId right_bottom_handle_hot = do_hot(
             right_bottom_handle_id, right_bottom_handle_rect, g->root.get());
         DuiId right_bottom_handle_active = do_active(right_bottom_handle_id);
         DuiId right_bottom_handle_dragging =
             do_dragging(right_bottom_handle_id);
+
         if (right_bottom_handle_hot || right_bottom_handle_dragging) {
-          push_rect(&s.forground_dl, &s.gdld, right_bottom_handle_rect,
-                    {1, 1, 1, 1});
+          set_cursor_shape(Platform::CursorShape::NWSE_RESIZE);
         }
+
         if (right_bottom_handle_dragging) {
-          g->rect.width += s.dragging_frame_delta.x;
-          g->rect.height += s.dragging_frame_delta.y;
+          Vec2f delta = clamped_mouse_pos - Vec2f(g->rect.x + g->rect.width,
+                                                  g->rect.y + g->rect.height);
+
+          g->rect.width += delta.x;
+          g->rect.height += delta.y;
+
           if (g->rect.width < MINIMUM_ROOT_WIDTH) {
             g->rect.width = MINIMUM_ROOT_WIDTH;
           }
@@ -1036,17 +1067,23 @@ void start_frame_for_group(Group *g)
         left_handle_rect.width =
             RESIZE_HANDLES_OVERSIZE + WINDOW_BORDER_SIZE + WINDOW_MARGIN_SIZE;
         left_handle_rect.height = g->rect.height;
+
         SUB_ID(left_handle_id, g->id.id);
         DuiId left_handle_hot =
             do_hot(left_handle_id, left_handle_rect, g->root.get());
         DuiId left_handle_active   = do_active(left_handle_id);
         DuiId left_handle_dragging = do_dragging(left_handle_id);
+
         if (left_handle_hot || left_handle_dragging) {
-          push_rect(&s.forground_dl, &s.gdld, left_handle_rect, {1, 1, 1, 1});
+          set_cursor_shape(Platform::CursorShape::HORIZ_RESIZE);
         }
+
         if (left_handle_dragging) {
-          g->rect.x += s.dragging_frame_delta.x;
-          g->rect.width -= s.dragging_frame_delta.x;
+          f32 delta = clamped_mouse_pos.x - g->rect.left();
+
+          g->rect.x += delta;
+          g->rect.width -= delta;
+
           if (g->rect.width < MINIMUM_ROOT_WIDTH) {
             g->rect.x -= MINIMUM_ROOT_WIDTH - g->rect.width;
             g->rect.width = MINIMUM_ROOT_WIDTH;
@@ -1060,16 +1097,22 @@ void start_frame_for_group(Group *g)
         right_handle_rect.width =
             RESIZE_HANDLES_OVERSIZE + WINDOW_BORDER_SIZE + WINDOW_MARGIN_SIZE;
         right_handle_rect.height = g->rect.height;
+
         SUB_ID(right_handle_id, g->id.id);
         DuiId right_handle_hot =
             do_hot(right_handle_id, right_handle_rect, g->root.get());
         DuiId right_handle_active   = do_active(right_handle_id);
         DuiId right_handle_dragging = do_dragging(right_handle_id);
+
         if (right_handle_hot || right_handle_dragging) {
-          push_rect(&s.forground_dl, &s.gdld, right_handle_rect, {1, 1, 1, 1});
+          set_cursor_shape(Platform::CursorShape::HORIZ_RESIZE);
         }
+
         if (right_handle_dragging) {
-          g->rect.width += s.dragging_frame_delta.x;
+          f32 delta = clamped_mouse_pos.x - g->rect.right();
+
+          g->rect.width += delta;
+
           if (g->rect.width < MINIMUM_ROOT_WIDTH) {
             g->rect.width = MINIMUM_ROOT_WIDTH;
           }
@@ -1081,17 +1124,23 @@ void start_frame_for_group(Group *g)
         top_handle_rect.width = g->rect.width;
         top_handle_rect.height =
             RESIZE_HANDLES_OVERSIZE + WINDOW_BORDER_SIZE + WINDOW_MARGIN_SIZE;
+
         SUB_ID(top_handle_id, g->id.id);
         DuiId top_handle_hot =
             do_hot(top_handle_id, top_handle_rect, g->root.get());
         DuiId top_handle_active   = do_active(top_handle_id);
         DuiId top_handle_dragging = do_dragging(top_handle_id);
+
         if (top_handle_hot || top_handle_dragging) {
-          push_rect(&s.forground_dl, &s.gdld, top_handle_rect, {1, 1, 1, 1});
+          set_cursor_shape(Platform::CursorShape::VERT_RESIZE);
         }
+
         if (top_handle_dragging) {
-          g->rect.y += s.dragging_frame_delta.y;
-          g->rect.height -= s.dragging_frame_delta.y;
+          f32 delta = clamped_mouse_pos.y - g->rect.top();
+
+          g->rect.y += delta;
+          g->rect.height -= delta;
+
           if (g->rect.height < MINIMUM_ROOT_HEIGHT) {
             g->rect.y -= MINIMUM_ROOT_HEIGHT - g->rect.height;
             g->rect.height = MINIMUM_ROOT_HEIGHT;
@@ -1105,16 +1154,22 @@ void start_frame_for_group(Group *g)
         bottom_handle_rect.width = g->rect.width;
         bottom_handle_rect.height =
             RESIZE_HANDLES_OVERSIZE + WINDOW_BORDER_SIZE + WINDOW_MARGIN_SIZE;
+
         SUB_ID(bottom_handle_id, g->id.id);
         DuiId bottom_handle_hot =
             do_hot(bottom_handle_id, bottom_handle_rect, g->root.get());
         DuiId bottom_handle_active   = do_active(bottom_handle_id);
         DuiId bottom_handle_dragging = do_dragging(bottom_handle_id);
+
         if (bottom_handle_hot || bottom_handle_dragging) {
-          push_rect(&s.forground_dl, &s.gdld, bottom_handle_rect, {1, 1, 1, 1});
+          set_cursor_shape(Platform::CursorShape::VERT_RESIZE);
         }
+
         if (bottom_handle_dragging) {
-          g->rect.height += s.dragging_frame_delta.y;
+          f32 delta = clamped_mouse_pos.y - g->rect.bottom();
+
+          g->rect.height += delta;
+
           if (g->rect.height < MINIMUM_ROOT_HEIGHT) {
             g->rect.height = MINIMUM_ROOT_HEIGHT;
           }
@@ -1167,11 +1222,17 @@ void start_frame_for_group(Group *g)
           g->splits[i].div_position - WINDOW_BORDER_SIZE - WINDOW_MARGIN_SIZE;
       split_move_handle.width  = g->rect.width;
       split_move_handle.height = 2 * (WINDOW_BORDER_SIZE + WINDOW_MARGIN_SIZE);
+
       SUB_ID(split_move_handle_id, g->id.id + i);
       DuiId split_move_handle_hot =
           do_hot(split_move_handle_id, split_move_handle, g->root.get());
       DuiId split_move_handle_active   = do_active(split_move_handle_id);
       DuiId split_move_handle_dragging = do_dragging(split_move_handle_id);
+
+      if (split_move_handle_hot || split_move_handle_dragging) {
+        set_cursor_shape(Platform::CursorShape::VERT_RESIZE);
+      }
+
       if (split_move_handle_dragging) {
         f32 delta_px = s.input->mouse_pos.y - split_move_handle.y;
 
@@ -1215,11 +1276,17 @@ void start_frame_for_group(Group *g)
       split_move_handle.y      = g->rect.y;
       split_move_handle.width  = 2 * (WINDOW_BORDER_SIZE + WINDOW_MARGIN_SIZE);
       split_move_handle.height = g->rect.height;
+
       SUB_ID(split_move_handle_id, g->id.id + i);
       DuiId split_move_handle_hot =
           do_hot(split_move_handle_id, split_move_handle, g->root.get());
       DuiId split_move_handle_active   = do_active(split_move_handle_id);
       DuiId split_move_handle_dragging = do_dragging(split_move_handle_id);
+
+      if (split_move_handle_hot || split_move_handle_dragging) {
+        set_cursor_shape(Platform::CursorShape::HORIZ_RESIZE);
+      }
+
       if (split_move_handle_dragging) {
         f32 delta_px = s.input->mouse_pos.x - split_move_handle.x;
 
@@ -1266,7 +1333,7 @@ void start_frame_for_group(Group *g)
   }
 }
 
-void start_frame(Input *input, Vec2f canvas_size)
+void start_frame(Input *input, Platform::GlfwWindow *window, Vec2f canvas_size)
 {
   s.input       = input;
   s.canvas_span = canvas_size;
@@ -1281,6 +1348,8 @@ void start_frame(Input *input, Vec2f canvas_size)
   s.just_stopped_being_dragging = -1;
   s.just_started_being_selected = -1;
   s.just_stopped_being_selected = -1;
+
+  s.cursor_shape = Platform::CursorShape::NORMAL;
 
   draw_system_start_frame(&s.gdld);
   clear_draw_list(&s.forground_dl);
@@ -1300,7 +1369,12 @@ void start_frame(Input *input, Vec2f canvas_size)
   s.top_root_group_at_mouse_pos     = -1;
   i32 top_root_group_at_mouse_pos_z = -1;
   for (i32 i = 0; i < s.root_groups.size; i++) {
-    if (in_rect(s.input->mouse_pos, s.root_groups[i].get()->rect)) {
+    Rect rect          = s.root_groups[i].get()->rect;
+    Rect oversize_rect = {rect.x - RESIZE_HANDLES_OVERSIZE,
+                          rect.y - RESIZE_HANDLES_OVERSIZE,
+                          rect.width + RESIZE_HANDLES_OVERSIZE * 2,
+                          rect.height + RESIZE_HANDLES_OVERSIZE * 2};
+    if (in_rect(s.input->mouse_pos, oversize_rect)) {
       s.top_root_group_at_mouse_pos = s.root_groups[i];
       top_root_group_at_mouse_pos_z = i;
       break;
@@ -1333,6 +1407,8 @@ void start_frame(Input *input, Vec2f canvas_size)
     g->dl    = &s.draw_lists[i];
     draw_group_and_children(g);
   }
+
+  window->set_cursor_shape(s.cursor_shape);
 }
 
 DuiId start_window(String name, Rect initial_rect)
@@ -1704,7 +1780,7 @@ API void api_init_dui(Device *device, Pipeline pipeline)
 }
 
 API void api_debug_ui_test(Device *device, Pipeline pipeline, Input *input,
-                           Vec2f canvas_size)
+                           Platform::GlfwWindow *window, Vec2f canvas_size)
 {
   static b8 paused = false;
   if (input->keys[(i32)Keys::LCTRL] && input->key_down_events[(i32)Keys::Q]) {
@@ -1723,7 +1799,7 @@ API void api_debug_ui_test(Device *device, Pipeline pipeline, Input *input,
     return;
   }
 
-  start_frame(input, canvas_size);
+  start_frame(input, window, canvas_size);
 
   DuiId w1 =
       start_window("Properties: tm_checkboard_tab", {100, 200, 300, 300});
@@ -1855,10 +1931,7 @@ API void api_debug_ui_test(Device *device, Pipeline pipeline, Input *input,
 
 API DuiState *api_get_dui_state() { return &s; }
 
-API ReloadData api_get_plugin_reload_data()
-{
-  return {&s};
-}
+API ReloadData api_get_plugin_reload_data() { return {&s}; }
 API void api_reload_plugin(ReloadData reload_data)
 {
   {

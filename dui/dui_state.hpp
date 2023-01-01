@@ -50,6 +50,8 @@ struct DuiState {
   DrawList main_dl;
   DrawList forground_dl;
 
+  Platform::CursorShape cursor_shape;
+
   // stuff to do next frame
   struct SnapGroupArgs {
     b8 need_to = false;
@@ -59,6 +61,5 @@ struct DuiState {
     b8 dir;
   };
   SnapGroupArgs snap_group_to_snap;
-  Array<GroupId, 256> groups_to_delete;
 };
 }  // namespace Dui

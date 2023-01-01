@@ -24,13 +24,12 @@ int main()
   init_dui_dll();
   Dui::init_dui(&device, pipeline);
 
-
   while (!window.should_close()) {
     Platform::fill_input(&window, &input);
 
     start_frame(&device, pipeline);
 
-    Dui::debug_ui_test(&device, pipeline, &input, window.get_size());
+    Dui::debug_ui_test(&device, pipeline, &input, &window, window.get_size());
 
     end_frame(&device);
 

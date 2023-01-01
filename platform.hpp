@@ -1,13 +1,23 @@
 #pragma once
 
 #define GLFW_INCLUDE_VULKAN
-#include "external/glfw/include/GLFW/glfw3.h"
+#include "external/glfw3.4/include/GLFW/glfw3.h"
 
 #include "input.hpp"
 #include "types.hpp"
 
 namespace Platform
 {
+
+enum struct CursorShape {
+  NORMAL,
+  HORIZ_RESIZE,
+  VERT_RESIZE,
+  NWSE_RESIZE,
+  SWNE_RESIZE,
+  IBEAM,
+  COUNT,
+};
 
 void init()
 {
@@ -26,21 +36,40 @@ struct GlfwWindow {
 
   Vec2f size;
 
+  GLFWcursor *cursors[(i32)CursorShape::COUNT] = {};
+
   void init()
   {
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
     ref = glfwCreateWindow(1920, 1080, "DUI Demo", nullptr, nullptr);
+
+    cursors[(i32)CursorShape::NORMAL] =
+        glfwCreateStandardCursor(GLFW_ARROW_CURSOR);
+    cursors[(i32)CursorShape::HORIZ_RESIZE] =
+        glfwCreateStandardCursor(GLFW_HRESIZE_CURSOR);
+    cursors[(i32)CursorShape::VERT_RESIZE] =
+        glfwCreateStandardCursor(GLFW_VRESIZE_CURSOR);
+    cursors[(i32)CursorShape::NWSE_RESIZE] =
+        glfwCreateStandardCursor(GLFW_RESIZE_NWSE_CURSOR);
+    cursors[(i32)CursorShape::SWNE_RESIZE] =
+        glfwCreateStandardCursor(GLFW_RESIZE_NESW_CURSOR);
+    cursors[(i32)CursorShape::IBEAM] =
+        glfwCreateStandardCursor(GLFW_IBEAM_CURSOR);
+        
+
   }
 
   VulkanExtensions get_vulkan_extensions()
   {
     VulkanExtensions vulkan_extensions;
-    vulkan_extensions.extensions = glfwGetRequiredInstanceExtensions(&vulkan_extensions.count);
+    vulkan_extensions.extensions =
+        glfwGetRequiredInstanceExtensions(&vulkan_extensions.count);
     return vulkan_extensions;
   }
 
-  Vec2f get_size() {
+  Vec2f get_size()
+  {
     Vec2i new_size;
     glfwGetWindowSize(ref, &new_size.x, &new_size.y);
 
@@ -60,6 +89,11 @@ struct GlfwWindow {
     glfwDestroyWindow(ref);
 
     glfwTerminate();
+  }
+
+  void set_cursor_shape(CursorShape shape)
+  {
+    glfwSetCursor(ref, cursors[(i32)shape]);
   }
 };
 
@@ -84,7 +118,7 @@ void fill_input(GlfwWindow *window, Input *state)
   state->mouse_pos_prev  = state->mouse_pos;
   state->mouse_pos       = {(f32)mouse_x, (f32)mouse_y};
   state->mouse_pos_delta = state->mouse_pos - state->mouse_pos_prev;
-  
+
   glfwPollEvents();
 }
 
@@ -98,7 +132,8 @@ void character_input_callback(GLFWwindow *window, u32 codepoint)
   }
 }
 
-void key_input_callback(GLFWwindow *window, i32 key, i32 scancode, i32 action, i32 mods)
+void key_input_callback(GLFWwindow *window, i32 key, i32 scancode, i32 action,
+                        i32 mods)
 {
   Input *input = static_cast<Input *>(glfwGetWindowUserPointer(window));
 

@@ -5,6 +5,7 @@
 #include "dui/draw.hpp"
 #include "math/math.hpp"
 
+const f32 RESIZE_HANDLES_OVERSIZE       = 3.f;
 const f32 TITLEBAR_HEIGHT               = 32;
 const f32 TITLEBAR_BOTTOM_BORDER_HEIGHT = 3.f;
 const f32 TAB_MARGIN                    = 3.f;
