@@ -5,7 +5,9 @@ namespace Dui
 
 void Container::start_frame(DuiState *s, Input *input, i64 current_frame)
 {
-  if (parent.get()->windows[parent.get()->active_window_idx] != id) return;
+  if (parent.valid() &&
+      parent.get()->windows[parent.get()->active_window_idx] != id)
+    return;
 
   if (last_frame_started == current_frame) {
     return;
@@ -20,7 +22,8 @@ void Container::start_frame(DuiState *s, Input *input, i64 current_frame)
   cursor_size = 0;
 
   b8 has_scrollwheel_focus =
-      (s->top_root_group_at_mouse_pos == parent.get()->root) &&
+      !parent.valid() ||
+      (s->top_root_group_at_mouse_pos == parent.get()->root) ||
       in_rect(input->mouse_pos, content_rect);
 
   // FYI doing this here can cause the position of the scrollbar to lag behind
@@ -155,12 +158,19 @@ void Container::start_frame(DuiState *s, Input *input, i64 current_frame)
   push_scissor(&s->gdld, content_rect);
 }
 
+void Container::end_frame(DuiState *s)
+{
+  pop_scissor(&s->gdld);
+  s->cc = -1;
+}
+
 Container *get_container(DuiId id) { return &s.containers.wrapped_get(id); }
 
 Container *get_current_container(DuiState *s)
 {
   Container *cc = s->cc != -1 ? get_container(s->cc) : nullptr;
-  if (!cc ||
+  if (!cc) return nullptr;
+  if (cc->parent.valid() &&
       cc->parent.get()->windows[cc->parent.get()->active_window_idx] != cc->id)
     return nullptr;
 

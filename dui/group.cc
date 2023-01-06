@@ -158,4 +158,19 @@ i32 Group::get_window_idx(DuiId window_id)
   }
   return -1;
 }
+
+DuiId Group::get_child_at_pos(Vec2f pos)
+{
+  if (is_leaf()) {
+    Container *c = get_container(windows[active_window_idx]);
+    if (in_rect(pos, c->rect)) return c->id;
+  } else {
+    for (i32 i = 0; i < splits.size; i++) {
+      Group *child = splits[i].child.get();
+      if (in_rect(pos, child->rect)) return child->get_child_at_pos(pos);
+    }
+  }
+
+  return -1;
+};
 }  // namespace Dui

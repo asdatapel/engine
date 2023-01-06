@@ -29,16 +29,40 @@ namespace Dui
 {
 DuiState s;
 
-b8 do_hot(DuiId id, Rect rect, Group *root_group = nullptr,
-          Container *c = nullptr, Rect clip_rect = {})
+// when control is not tied to any group or container
+b8 do_hot(DuiId id, Rect rect)
 {
-  b8 is_in_top_group = !s.top_root_group_at_mouse_pos.valid() || !root_group ||
-                       (root_group->id == s.top_root_group_at_mouse_pos);
+  b8 is_hot = in_rect(s.input->mouse_pos, rect);
+  if (is_hot)
+    s.set_hot(id);
+  else
+    s.clear_hot(id);
 
-  b8 is_in_clip_rect =
-      clip_rect.width == 0 || in_rect(s.input->mouse_pos, clip_rect);
-  b8 is_in_current_window = !c || in_rect(s.input->mouse_pos, c->rect);
-  b8 is_hot = is_in_clip_rect && is_in_top_group && is_in_current_window &&
+  return is_hot;
+}
+
+// for group controls
+b8 do_hot(DuiId id, Rect rect, Group *root_group)
+{
+  b8 is_in_top_group = !s.top_root_group_at_mouse_pos.valid() ||
+                       root_group->id == s.top_root_group_at_mouse_pos;
+
+  b8 is_hot = is_in_top_group && in_rect(s.input->mouse_pos, rect);
+  if (is_hot)
+    s.set_hot(id);
+  else
+    s.clear_hot(id);
+
+  return is_hot;
+}
+
+// for widgets inside containers
+b8 do_hot(DuiId id, Rect rect, Container *c)
+{
+  b8 is_top_container     = c->id == s.top_container_at_mouse_pos;
+  b8 is_in_container_rect = in_rect(s.input->mouse_pos, c->rect);
+
+  b8 is_hot = is_top_container && is_in_container_rect &&
               in_rect(s.input->mouse_pos, rect);
   if (is_hot)
     s.set_hot(id);
@@ -99,8 +123,7 @@ b8 do_dragging(DuiId id)
     }
 
     // prevent dragging off screen by clamping mouse_pos
-    Vec2f clamped_mouse_pos =
-        clamp_to_rect(s.input->mouse_pos, {{0, 0}, s.canvas_span});
+    Vec2f clamped_mouse_pos    = clamp_to_rect(s.input->mouse_pos, s.canvas);
     Vec2f dragging_total_delta = clamped_mouse_pos - s.start_position_active;
     s.dragging_frame_delta     = dragging_total_delta - s.dragging_total_delta;
     s.dragging_total_delta     = dragging_total_delta;
@@ -340,8 +363,8 @@ Group *unparent_window(DuiId window_id)
   Group *g = create_group(nullptr, old_g->rect);
   parent_window(g, window_id);
 
-  g->rect.width  = fminf(g->rect.width / 2, s.canvas_span.x);
-  g->rect.height = fminf(g->rect.height / 2, s.canvas_span.y);
+  g->rect.width  = fminf(g->rect.width / 2, s.canvas.width);
+  g->rect.height = fminf(g->rect.height / 2, s.canvas.height);
 
   return g;
 }
@@ -884,10 +907,7 @@ void start_frame_for_group(Group *g)
   s.cg = g->id;
 
   if (s.fullscreen_group == g->id) {
-    g->rect.x      = 0;
-    g->rect.y      = 0;
-    g->rect.width  = s.canvas_span.x;
-    g->rect.height = s.canvas_span.y;
+    g->rect = s.canvas;
   }
 
   if (!g->parent.valid()) {
@@ -913,8 +933,7 @@ void start_frame_for_group(Group *g)
         const f32 MINIMUM_ROOT_WIDTH  = 50.f;
         const f32 MINIMUM_ROOT_HEIGHT = 75.f;
 
-        Vec2f clamped_mouse_pos =
-            clamp(s.input->mouse_pos, Vec2f(0, 0), s.canvas_span);
+        Vec2f clamped_mouse_pos = clamp_to_rect(s.input->mouse_pos, s.canvas);
 
         Rect left_top_handle_rect;
         left_top_handle_rect.x = g->rect.x - RESIZE_HANDLES_OVERSIZE;
@@ -1190,20 +1209,20 @@ void start_frame_for_group(Group *g)
         right_window_control.width = WINDOW_CONTROL_WIDTH;
 
         if (left_window_control.x + left_window_control.width >
-            s.canvas_span.x) {
+            s.canvas.right()) {
           g->rect.x -= (left_window_control.x + left_window_control.width) -
-                       s.canvas_span.x;
+                       s.canvas.right();
         }
         if (left_window_control.y + left_window_control.height >
-            s.canvas_span.y) {
+            s.canvas.bottom()) {
           g->rect.y -= (left_window_control.y + left_window_control.height) -
-                       s.canvas_span.y;
+                       s.canvas.bottom();
         }
-        if (right_window_control.x < 0) {
-          g->rect.x -= right_window_control.x;
+        if (right_window_control.x < s.canvas.left()) {
+          g->rect.x -= right_window_control.x - s.canvas.left();
         }
-        if (right_window_control.y < 0) {
-          g->rect.y -= right_window_control.y;
+        if (right_window_control.y < s.canvas.top()) {
+          g->rect.y -= right_window_control.y - s.canvas.top();
         }
       }
     }
@@ -1333,10 +1352,12 @@ void start_frame_for_group(Group *g)
   }
 }
 
-void start_frame(Input *input, Platform::GlfwWindow *window, Vec2f canvas_size)
+void start_frame(Input *input, Platform::GlfwWindow *window)
 {
-  s.input       = input;
-  s.canvas_span = canvas_size;
+  s.input = input;
+
+  s.window_span = window->get_size();
+  s.canvas      = {0, 0, s.window_span.x, s.window_span.y};
 
   s.frame++;
 
@@ -1356,6 +1377,26 @@ void start_frame(Input *input, Platform::GlfwWindow *window, Vec2f canvas_size)
   clear_draw_list(&s.main_dl);
   for (i32 i = 0; i < s.draw_lists.size; i++) {
     clear_draw_list(&s.draw_lists[i]);
+  }
+
+  if (s.menubar_visible) {
+    s.canvas.y += MENUBAR_HEIGHT;
+    s.canvas.height -= MENUBAR_HEIGHT;
+
+    Rect menubar_rect = {0, 0, s.window_span.x, MENUBAR_HEIGHT};
+    push_rect(&s.forground_dl, &s.gdld, menubar_rect, d);
+
+    String menuitems[]           = {"File", "Edit", "View", "Window"};
+    f32 next_menubar_item_offset = MENUBAR_MARGIN;
+    for (i32 i = 0; i < 4; i++) {
+      push_vector_text(&s.forground_dl, &s.gdld, menuitems[i],
+                       {next_menubar_item_offset, MENUBAR_MARGIN}, {1, 1, 1, 1},
+                       MENUBAR_FONT_SIZE);
+
+      next_menubar_item_offset +=
+          s.gdld.vfont.get_text_width(menuitems[i], MENUBAR_FONT_SIZE) +
+          MENUBAR_MARGIN * 2;
+    }
   }
 
   // handle pending changes
@@ -1390,6 +1431,20 @@ void start_frame(Input *input, Platform::GlfwWindow *window, Vec2f canvas_size)
     }
   }
 
+  s.top_container_at_mouse_pos = -1;
+  for (i32 i = 0; i < s.popups.size; i++) {
+    Container *popup_c = get_container(s.popups[i]);
+    if (in_rect(s.input->mouse_pos, popup_c->rect)) {
+      s.top_container_at_mouse_pos = s.popups[i];
+    }
+  }
+  if (s.top_container_at_mouse_pos == -1 &&
+      s.top_root_group_at_mouse_pos != -1) {
+    s.top_container_at_mouse_pos =
+        s.top_root_group_at_mouse_pos.get()->get_child_at_pos(
+            s.input->mouse_pos);
+  }
+
   // one pass for input handling
   for (i32 i = 0; i < s.root_groups.size; i++) {
     Group *g = s.root_groups[i].get();
@@ -1409,6 +1464,17 @@ void start_frame(Input *input, Platform::GlfwWindow *window, Vec2f canvas_size)
   }
 
   window->set_cursor_shape(s.cursor_shape);
+}
+
+void end_frame(Platform::GlfwWindow *window, Device *device, Pipeline pipeline)
+{
+  for (i32 i = s.root_groups.size - 1; i >= 0; i--) {
+    draw_draw_list(s.root_groups[i].get()->dl, &s.gdld, device, pipeline,
+                   s.window_span, s.frame);
+  }
+  draw_draw_list(&s.main_dl, &s.gdld, device, pipeline, s.window_span, s.frame);
+  draw_draw_list(&s.forground_dl, &s.gdld, device, pipeline, s.window_span,
+                 s.frame);
 }
 
 DuiId start_window(String name, Rect initial_rect)
@@ -1433,8 +1499,7 @@ DuiId start_window(String name, Rect initial_rect)
 void end_window()
 {
   if (s.cc != -1) {
-    pop_scissor(&s.gdld);
-    s.cc = -1;
+    get_container(s.cc)->end_frame(&s);
   }
 
   if (s.cw) {
@@ -1465,71 +1530,6 @@ void next_line()
   c->next_line();
 }
 
-b8 button(DuiId me, String text)
-{
-  Container *c = get_current_container(&s);
-  if (!c) return false;
-
-  // f32 border     = 5;
-  // f32 text_width = get_text_width(text, state.style.content_font_size);
-  // Rect rect = c->place({text_width + border * 2,
-  // state.style.content_font_size + border * 2});
-
-  // b8 hot       = do_hot(me, rect, c->rect);
-  // b8 active    = do_active(me);
-  // b8 triggered = (state.just_deactivated == me && hot);
-
-  // Color color   = {.9, .3, .2, 1};
-  // Color light   = lighten(color, .1);
-  // Color lighter = lighten(color, .15);
-  // Color dark    = darken(color, .1);
-  // Color darker  = darken(color, .15);
-
-  // Color top   = lighter;
-  // Color down  = darker;
-  // Color left  = light;
-  // Color right = dark;
-
-  // f32 text_y_offset = 0;
-  // if (active) {
-  //   color = darken(color, 0.05f);
-
-  //   top   = darker;
-  //   down  = lighter;
-  //   left  = dark;
-  //   right = light;
-
-  //   text_y_offset = 3.f;
-  // } else if (hot) {
-  //   color = lighten(color, .05f);
-  // }
-
-  // f32 x1 = rect.x, x2 = rect.x + border, x3 = rect.x + rect.width - border,
-  //     x4 = rect.x + rect.width;
-
-  // f32 y1 = rect.y, y2 = rect.y + border, y3 = rect.y + rect.height - border,
-  //     y4 = rect.y + rect.height;
-
-  // c->draw_list->push_quad({x4, y1}, {x3, y2}, {x2, y2}, {x1, y1}, top);
-  // c->draw_list->push_quad({x4, y4}, {x1, y4}, {x2, y3}, {x3, y3}, down);
-  // c->draw_list->push_quad({x1, y4}, {x2, y3}, {x2, y2}, {x1, y1}, left);
-  // c->draw_list->push_quad({x4, y4}, {x3, y3}, {x3, y2}, {x4, y1}, right);
-  // c->draw_list->push_quad({x2, y2},  // center
-  //                         {x2, y3}, {x3, y3}, {x3, y2}, color);
-  // c->draw_list->push_text(text, {rect.x + border, rect.y + border +
-  // text_y_offset},
-  //                         state.style.content_font_size,
-  //                         state.style.content_highlighted_text_color);
-
-  // return triggered;
-  return false;
-}
-b8 button(String text)
-{
-  DuiId me = hash(text);
-  return button(me, text);
-}
-
 b8 button(String text, Vec2f size, Color color, b8 fill = false)
 {
   Container *c = get_current_container(&s);
@@ -1539,8 +1539,8 @@ b8 button(String text, Vec2f size, Color color, b8 fill = false)
 
   Rect rect = c->place(size, true, fill);
 
-  b8 hot    = do_hot(id, rect, c->parent.get()->root.get(), c, c->content_rect);
-  b8 active = do_active(id);
+  b8 hot     = do_hot(id, rect, c);
+  b8 active  = do_active(id);
   b8 clicked = hot && s.just_stopped_being_active == id;
 
   static f32 darkenf     = 0.f;
@@ -1591,8 +1591,8 @@ void text_input(StaticString<N> *str)
   Rect border_rect = c->place({0, height}, true, true);
   Rect rect        = inset(border_rect, 1.5f);
 
-  b8 hot    = do_hot(id, rect, c->parent.get()->root.get(), c, c->content_rect);
-  b8 active = do_active(id);
+  b8 hot      = do_hot(id, rect, c);
+  b8 active   = do_active(id);
   b8 dragging = do_dragging(id);
   b8 selected = do_selected(id);
   b8 clicked  = hot && s.just_started_being_active == id;
@@ -1612,7 +1612,7 @@ void text_input(StaticString<N> *str)
     cursor_blink_time = 0.f;
   }
 
-  f32 font_size = 21;
+  f32 font_size = CONTENT_FONT_HEIGHT;
 
   f32 cursor_pos = text_pos + s.gdld.vfont.get_text_width(
                                   str->to_str().sub(0, cursor_idx), font_size);
@@ -1780,26 +1780,9 @@ API void api_init_dui(Device *device, Pipeline pipeline)
 }
 
 API void api_debug_ui_test(Device *device, Pipeline pipeline, Input *input,
-                           Platform::GlfwWindow *window, Vec2f canvas_size)
+                           Platform::GlfwWindow *window)
 {
-  static b8 paused = false;
-  if (input->keys[(i32)Keys::LCTRL] && input->key_down_events[(i32)Keys::Q]) {
-    paused = !paused;
-  }
-
-  if (paused) {
-    draw_draw_list(&s.main_dl, &s.gdld, device, pipeline, canvas_size, s.frame);
-    draw_draw_list(&s.forground_dl, &s.gdld, device, pipeline, canvas_size,
-                   s.frame);
-    for (i32 i = 0; i < s.draw_lists.size; i++) {
-      draw_draw_list(&s.draw_lists[i], &s.gdld, device, pipeline, canvas_size,
-                     s.frame);
-    }
-
-    return;
-  }
-
-  start_frame(input, window, canvas_size);
+  start_frame(input, window);
 
   DuiId w1 =
       start_window("Properties: tm_checkboard_tab", {100, 200, 300, 300});
@@ -1874,59 +1857,29 @@ API void api_debug_ui_test(Device *device, Pipeline pipeline, Input *input,
 
   end_window();
 
-  auto p = [&](DuiId window_id) {
-    Container *w = &s.containers.wrapped_get(window_id);
-    return w->parent;
-  };
+  // Popups wip
+  // static b8 init = false;
+  // if (!init) {
+  //   init = true;
 
-  // static Group *root   = p(w1);
-  // static Group *root_2 = p(w1);
+  //   DuiId id          = hash("Popup");
+  //   Container *window = s.containers.emplace_wrapped(id, {});
+  //   window->id        = id;
+  //   window->title     = String("Popup");
+  //   s.popups.push_back(id);
 
-  static i32 count = 0;
-  if (input->key_down_events[(i32)Keys::SPACE]) {
-    // if (count == 0) {
-    //   snap_group(p(w2), p(w1), 1, true);
-    // }
+  //   window->rect = {s.canvas.width / 3, s.canvas.height / 3, s.canvas.width / 3,
+  //                   s.canvas.height / 3};
+  // }
+  // for (i32 i = 0; i < s.popups.size; i++) {
+  //   DuiId cid    = s.popups[i];
+  //   Container *c = get_container(cid);
+  //   c->start_frame(&s, input, s.frame);
+  //   if (button("POPUP", {200, 30}, l_dark, true)) info("test8");
+  //   c->end_frame(&s);
+  // }
 
-    // if (count == 1) {
-    //   snap_group(p(w3), p(w1), 0, false);
-    // }
-
-    // if (count == 2) {
-    //   root_2 = p(w2);
-    //   snap_group(p(w4), p(w2), 0, false);
-    // }
-
-    // if (count == 3) {
-    //   snap_group(p(w5), root, 0, true);
-    // }
-
-    // if (count == 4) {
-    //   snap_group(p(w6), p(w4), 1, true);
-    // }
-
-    // if (count == 5) {
-    //   parent_window(p(w1), w7);
-    //   // snap_group(p(w7), root_2, 0, true);
-    // }
-
-    count++;
-  }
-
-  std::vector<Group *> groups;
-  for (i32 i = 0; i < s.groups.SIZE; i++) {
-    if (!s.groups.exists(i)) continue;
-
-    groups.push_back(&s.groups[i]);
-  }
-
-  for (i32 i = s.root_groups.size - 1; i >= 0; i--) {
-    draw_draw_list(s.root_groups[i].get()->dl, &s.gdld, device, pipeline,
-                   canvas_size, s.frame);
-  }
-  draw_draw_list(&s.main_dl, &s.gdld, device, pipeline, canvas_size, s.frame);
-  draw_draw_list(&s.forground_dl, &s.gdld, device, pipeline, canvas_size,
-                 s.frame);
+  end_frame(window, device, pipeline);
 }
 
 API DuiState *api_get_dui_state() { return &s; }

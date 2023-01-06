@@ -142,7 +142,7 @@ void push_scissor(GlobalDrawListData *gdld, Rect rect)
   auto to_bounds = [](Rect r) {
     return Vec4f{r.x, r.y, r.x + r.width, r.y + r.height};
   };
-  if (gdld->scissors.count > 0) {
+  if (gdld->scissors.size > 0) {
     Vec4f rect_bounds   = to_bounds(rect);
     Vec4f parent_bounds = to_bounds(gdld->scissors.top());
 

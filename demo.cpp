@@ -29,7 +29,7 @@ int main()
 
     start_frame(&device, pipeline);
 
-    Dui::debug_ui_test(&device, pipeline, &input, &window, window.get_size());
+    Dui::debug_ui_test(&device, pipeline, &input, &window);
 
     end_frame(&device);
 

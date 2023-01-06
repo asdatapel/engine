@@ -25,8 +25,18 @@ struct DuiState {
   DuiId cw   = -1;
   DuiId cc   = -1;
 
+  StaticStack<DuiId, 256> popups; 
+
   Input *input = nullptr;
-  Vec2f canvas_span;
+
+  Vec2f window_span;
+  Rect canvas;
+  i64 frame                           = 0;
+
+  GroupId top_root_group_at_mouse_pos = -1;
+  DuiId top_container_at_mouse_pos = -1;
+
+  b8 menubar_visible = true;
 
   INTERACTION_STATE(hot);
   INTERACTION_STATE(active);
@@ -36,9 +46,6 @@ struct DuiState {
   Vec2f dragging_total_delta;
   Vec2f dragging_frame_delta;
   Vec2f dragging_start_local_position;
-
-  i64 frame                           = 0;
-  GroupId top_root_group_at_mouse_pos = -1;
 
   // text input state
   i32 cursor_idx          = 0;

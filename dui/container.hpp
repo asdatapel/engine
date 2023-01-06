@@ -9,7 +9,7 @@ namespace Dui
 {
 
 const f32 SCROLLBAR_BORDER = 2.f;
-const f32 SCROLLBAR_SIZE = 8.f;
+const f32 SCROLLBAR_SIZE   = 8.f;
 
 struct Container {
   DuiId id;
@@ -31,7 +31,7 @@ struct Container {
   // container.
   i64 last_frame_started = -1;
   i64 last_frame         = -1;
-  
+
   // total space requested by content last frame. this is whats used to
   // determine free space and stretch controls to bounds.
   Vec2f last_frame_minimum_content_span    = {0, 0};
@@ -51,7 +51,7 @@ struct Container {
     if (last_frame_minimum_content_span.y > rect.height) {
       rect.width -= SCROLLBAR_SIZE;
 
-      // do this again because it might be true now 
+      // do this again because it might be true now
       if (!shrunk_height && last_frame_minimum_content_span.x > rect.width) {
         rect.height -= SCROLLBAR_SIZE;
       }
@@ -61,6 +61,7 @@ struct Container {
   }
 
   void start_frame(DuiState *s, Input *input, i64 current_frame);
+  void end_frame(DuiState *s);
 
   Rect place(Vec2f size, b8 commit = true, b8 fill = false)
   {
