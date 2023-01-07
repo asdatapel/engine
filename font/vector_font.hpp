@@ -162,7 +162,7 @@ VectorFont create_font()
   }
 
   FT_Face face;
-  err = FT_New_Face(library, "resources/fonts/roboto/Roboto-Regular.ttf", 0,
+  err = FT_New_Face(library, "resources/fonts/OpenSans-Regular.ttf", 0,
                     &face);
   if (err) {
     fatal("failed to load font");

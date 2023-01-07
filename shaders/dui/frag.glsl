@@ -120,9 +120,6 @@ void main() {
     } else if (in_primitive_type == VECTOR_GLYPH) {
       VectorGlyphPrimitive glyph = primitives.vector_glyphs[in_primitive_idx];
 
-      float inverse_width = (fwidth(in_uv).x + fwidth(in_uv).y);
-      float inverse_height = fwidth(in_uv).y;
-
       int n_samples = 8;
       float coverage  = 0.f;
       for (int curve_i = 0; curve_i < glyph.curve_count; curve_i++) {
