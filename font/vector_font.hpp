@@ -58,7 +58,7 @@ struct VectorFont {
 
 Glyph extract_glyph(VectorFont* font, FT_Face face, u32 character)
 {
-  FT_Error err = FT_Set_Pixel_Sizes(face, 0, 16);
+  FT_Error err = FT_Set_Pixel_Sizes(face, 0, 32);
   if (err) {
     fatal("failed to set pixel size?");
   }
@@ -162,7 +162,7 @@ VectorFont create_font()
   }
 
   FT_Face face;
-  err = FT_New_Face(library, "resources/fonts/OpenSans-Regular.ttf", 0,
+  err = FT_New_Face(library, "resources/fonts/roboto/Roboto-Regular.ttf", 0,
                     &face);
   if (err) {
     fatal("failed to load font");
@@ -177,97 +177,97 @@ VectorFont create_font()
   return font;
 }
 
-struct ConicCurve {
-  Vec2f p0, p1, control;
-};
+// struct ConicCurve {
+//   Vec2f p0, p1, control;
+// };
 
-template <u32 WIDTH, u32 HEIGHT>
-struct Grid {
-  struct Cell {
-    Array<ConicCurve, 128> curves;
-    b8 inside = false;
-  };
+// template <u32 WIDTH, u32 HEIGHT>
+// struct Grid {
+//   struct Cell {
+//     Array<ConicCurve, 128> curves;
+//     b8 inside = false;
+//   };
 
-  const u32 width  = WIDTH;
-  const u32 height = HEIGHT;
+//   const u32 width  = WIDTH;
+//   const u32 height = HEIGHT;
 
-  Cell cells[WIDTH * HEIGHT];
-  Cell& get(u32 x, u32 y) { return cells[y * HEIGHT + x]; }
-};
+//   Cell cells[WIDTH * HEIGHT];
+//   Cell& get(u32 x, u32 y) { return cells[y * HEIGHT + x]; }
+// };
 
-const Vec2i grid_dimensions = Vec2i(5, 5);
-const Vec2f cell_size =
-    Vec2f(1, 1) / Vec2f(grid_dimensions.x, grid_dimensions.y);
-Grid<5, 5> grid;
+// const Vec2i grid_dimensions = Vec2i(5, 5);
+// const Vec2f cell_size =
+//     Vec2f(1, 1) / Vec2f(grid_dimensions.x, grid_dimensions.y);
+// Grid<5, 5> grid;
 
-// basically copied from https://github.com/GreenLightning/gpu-font-rendering
-float computeCoverage(ConicCurve curve, Vec2f origin, f32 rotation,
-                      f32 pixel_width)
-{
-  f32 cos_theta = cosf(rotation);
-  f32 sin_theta = sinf(rotation);
+// // basically copied from https://github.com/GreenLightning/gpu-font-rendering
+// float computeCoverage(ConicCurve curve, Vec2f origin, f32 rotation,
+//                       f32 pixel_width)
+// {
+//   f32 cos_theta = cosf(rotation);
+//   f32 sin_theta = sinf(rotation);
 
-  auto rotate = [&](Vec2f p) {
-    Vec2f p2;
-    p2.x = p.x * cos_theta - p.y * sin_theta;
-    p2.y = p.x * sin_theta + p.y * cos_theta;
-    return p2;
-  };
+//   auto rotate = [&](Vec2f p) {
+//     Vec2f p2;
+//     p2.x = p.x * cos_theta - p.y * sin_theta;
+//     p2.y = p.x * sin_theta + p.y * cos_theta;
+//     return p2;
+//   };
 
-  curve.p0 -= origin;
-  curve.p1 -= origin;
-  curve.control -= origin;
+//   curve.p0 -= origin;
+//   curve.p1 -= origin;
+//   curve.control -= origin;
 
-  curve.p0      = rotate(curve.p0);
-  curve.p1      = rotate(curve.p1);
-  curve.control = rotate(curve.control);
+//   curve.p0      = rotate(curve.p0);
+//   curve.p1      = rotate(curve.p1);
+//   curve.control = rotate(curve.control);
 
-  Vec2f p0 = curve.p0;
-  Vec2f p1 = curve.control;
-  Vec2f p2 = curve.p1;
+//   Vec2f p0 = curve.p0;
+//   Vec2f p1 = curve.control;
+//   Vec2f p2 = curve.p1;
 
-  if (p0.y > 0 && p1.y > 0 && p2.y > 0) return 0.0;
-  if (p0.y < 0 && p1.y < 0 && p2.y < 0) return 0.0;
+//   if (p0.y > 0 && p1.y > 0 && p2.y > 0) return 0.0;
+//   if (p0.y < 0 && p1.y < 0 && p2.y < 0) return 0.0;
 
-  // Note: Simplified from abc formula by extracting a factor of (-2) from b.
-  Vec2f a = p0 - 2 * p1 + p2;
-  Vec2f b = p0 - p1;
-  Vec2f c = p0;
+//   // Note: Simplified from abc formula by extracting a factor of (-2) from b.
+//   Vec2f a = p0 - 2 * p1 + p2;
+//   Vec2f b = p0 - p1;
+//   Vec2f c = p0;
 
-  float t0, t1;
-  if (abs(a.y) >= 1e-5) {
-    // Quadratic segment, solve abc formula to find roots.
-    float radicand = b.y * b.y - a.y * c.y;
-    if (radicand <= 0) return 0.0;
+//   float t0, t1;
+//   if (abs(a.y) >= 1e-5) {
+//     // Quadratic segment, solve abc formula to find roots.
+//     float radicand = b.y * b.y - a.y * c.y;
+//     if (radicand <= 0) return 0.0;
 
-    float s = sqrt(radicand);
-    t0      = (b.y - s) / a.y;
-    t1      = (b.y + s) / a.y;
-  } else {
-    float t = p0.y / (p0.y - p2.y);
-    if (p0.y < p2.y) {
-      t0 = -1.0;
-      t1 = t;
-    } else {
-      t0 = t;
-      t1 = -1.0;
-    }
-  }
+//     float s = sqrt(radicand);
+//     t0      = (b.y - s) / a.y;
+//     t1      = (b.y + s) / a.y;
+//   } else {
+//     float t = p0.y / (p0.y - p2.y);
+//     if (p0.y < p2.y) {
+//       t0 = -1.0;
+//       t1 = t;
+//     } else {
+//       t0 = t;
+//       t1 = -1.0;
+//     }
+//   }
 
-  float alpha = 0;
+//   float alpha = 0;
 
-  if (t0 >= 0 && t0 < 1) {
-    float x = (a.x * t0 - 2.0 * b.x) * t0 + c.x;
-    alpha += clamp(x * (1.f / pixel_width) + .5f, 0.f, 1.f);
-  }
+//   if (t0 >= 0 && t0 < 1) {
+//     float x = (a.x * t0 - 2.0 * b.x) * t0 + c.x;
+//     alpha += clamp(x * (1.f / pixel_width) + .5f, 0.f, 1.f);
+//   }
 
-  if (t1 >= 0 && t1 < 1) {
-    float x = (a.x * t1 - 2.0 * b.x) * t1 + c.x;
-    alpha -= clamp(x * (1.f / pixel_width) + .5f, 0.f, 1.f);
-  }
+//   if (t1 >= 0 && t1 < 1) {
+//     float x = (a.x * t1 - 2.0 * b.x) * t1 + c.x;
+//     alpha -= clamp(x * (1.f / pixel_width) + .5f, 0.f, 1.f);
+//   }
 
-  return alpha;
-}
+//   return alpha;
+// }
 
 // f32 rasterize(Image image, Input* input)
 // {

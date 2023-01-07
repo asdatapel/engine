@@ -1555,7 +1555,7 @@ b8 button(String text, Vec2f size, Color color, b8 fill = false)
 
   push_rounded_rect(&s.dl, c->z, rect, 5.f, color);
   push_rounded_rect(&s.dl, c->z, inset(rect, 1.5f), 5.f, darken(color, .2f));
-  push_vector_text_centered(&s.dl, c->z, text, rect.center(), {1, 1, 1, 1}, 21,
+  push_vector_text_centered(&s.dl, c->z, text, rect.center(), {1, 1, 1, 1}, rect.height,
                             {true, true});
 
   return clicked;

@@ -120,30 +120,21 @@ void main() {
     } else if (in_primitive_type == VECTOR_GLYPH) {
       VectorGlyphPrimitive glyph = primitives.vector_glyphs[in_primitive_idx];
 
-      float inverse_width = (fwidth(in_uv).x + fwidth(in_uv).y) / 2;
+      float inverse_width = (fwidth(in_uv).x + fwidth(in_uv).y);
       float inverse_height = fwidth(in_uv).y;
 
-      int n_samples = 16;
+      int n_samples = 8;
       float coverage  = 0.f;
       for (int curve_i = 0; curve_i < glyph.curve_count; curve_i++) {
+        ConicCurvePrimitive curve = primitives.conic_curves[glyph.curve_start_idx + curve_i];
         for (int s = 0; s < n_samples; s++) {
-          ConicCurvePrimitive curve = primitives.conic_curves[glyph.curve_start_idx + curve_i];
-
-          float angle = s * 3.1415 / (n_samples);
-
-          coverage += compute_coverage(curve, in_uv, angle, inverse_width) /
+          float angle = 3.1415 * s / n_samples;
+          float width = length(fwidth(in_uv) * vec2(cos(angle), sin(angle))) * 2;
+          coverage += compute_coverage(curve, in_uv, angle, width) /
                       n_samples;
         }
-
-        
-        // ConicCurvePrimitive curve = primitives.conic_curves[glyph.curve_start_idx + curve_i];
-        // coverage += compute_coverage(curve, in_uv, 0, inverse_width) /
-        //             2;
-        // coverage += compute_coverage(curve, in_uv, -3.1415 / 2, inverse_height) /
-        //             2;
       }
       out_color = vec4(in_color.rgb, in_color.a * coverage);
       out_color.a *= clip(in_position, in_clip_rect_bounds);
     }
-    
 }
