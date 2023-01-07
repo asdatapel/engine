@@ -20,6 +20,8 @@ struct DuiState {
   GroupId fullscreen_group = -1;
   GroupId empty_group      = -1;
 
+  DrawList dl;
+
   // currently being worked on
   GroupId cg = -1;
   DuiId cw   = -1;
@@ -52,10 +54,6 @@ struct DuiState {
   i32 highlight_start_idx = 0;
   f32 text_pos            = 0.f;
 
-  GlobalDrawListData gdld;
-  Array<DrawList, 20> draw_lists;  // TODO: make this dynamic
-  DrawList main_dl;
-  DrawList forground_dl;
 
   Platform::CursorShape cursor_shape;
 
@@ -64,7 +62,7 @@ struct DuiState {
     b8 need_to = false;
     GroupId g;
     GroupId target;
-    i32 axis;
+    i32 axis; // -1 for center, used only for replacing the empty group
     b8 dir;
   };
   SnapGroupArgs snap_group_to_snap;

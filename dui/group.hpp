@@ -58,11 +58,9 @@ struct Group {
   Rect rect;
   Vec2f span_before_snap = {0, 0};
 
-  // can change frame to frame
-  DrawList *dl;
-
   // cache to prevent walking up the tree constantly
   GroupId root = -1;
+  i32 z = -1;
 
   // Either split into children groups...
   i32 split_axis = -1;

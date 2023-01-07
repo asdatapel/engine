@@ -3,17 +3,13 @@
 namespace Dui
 {
 
-void Container::start_frame(DuiState *s, Input *input, i64 current_frame)
+void Container::start_frame(DuiState *s)
 {
-  if (parent.valid() &&
-      parent.get()->windows[parent.get()->active_window_idx] != id)
-    return;
-
-  if (last_frame_started == current_frame) {
+  if (last_frame_started == s->frame) {
     return;
   }
-  last_frame_started = current_frame;
-  last_frame         = current_frame;
+  last_frame_started = s->frame;
+  last_frame         = s->frame;
 
   last_frame_minimum_content_span    = current_frame_minimum_content_span;
   current_frame_minimum_content_span = {0, 0};
@@ -21,10 +17,8 @@ void Container::start_frame(DuiState *s, Input *input, i64 current_frame)
   cursor      = {0, 0};
   cursor_size = 0;
 
-  b8 has_scrollwheel_focus =
-      !parent.valid() ||
-      (s->top_root_group_at_mouse_pos == parent.get()->root) ||
-      in_rect(input->mouse_pos, content_rect);
+  b8 has_scrollwheel_focus = (s->top_container_at_mouse_pos == id) ||
+                             in_rect(s->input->mouse_pos, content_rect);
 
   // FYI doing this here can cause the position of the scrollbar to lag behind
   // a moving container. Its ok though because it will still be drawn in the
@@ -51,8 +45,7 @@ void Container::start_frame(DuiState *s, Input *input, i64 current_frame)
              content_rect.y + scrollbar_y, SCROLLBAR_SIZE, scrollbar_height};
 
     DuiId vertical_scrollbar_id = extend_hash(id, "vertical_scrollbar");
-    b8 hot      = do_hot(vertical_scrollbar_id, scrollbar_area_rect,
-                         parent.get()->root.get());
+    b8 hot      = do_hot(vertical_scrollbar_id, scrollbar_area_rect, this);
     b8 active   = do_active(vertical_scrollbar_id);
     b8 dragging = do_dragging(vertical_scrollbar_id);
     if (hot) {
@@ -60,14 +53,14 @@ void Container::start_frame(DuiState *s, Input *input, i64 current_frame)
     }
     if (s->just_started_being_dragging == vertical_scrollbar_id) {
       s->dragging_start_local_position.y =
-          input->mouse_pos.y - scrollbar_rect.y;
+          s->input->mouse_pos.y - scrollbar_rect.y;
       if (s->dragging_start_local_position.y < 0 ||
           s->dragging_start_local_position.y > scrollbar_rect.height) {
         s->dragging_start_local_position.y = scrollbar_rect.height / 2;
       }
     }
     if (dragging) {
-      scrollbar_y += (input->mouse_pos.y - scrollbar_rect.y) -
+      scrollbar_y += (s->input->mouse_pos.y - scrollbar_rect.y) -
                      s->dragging_start_local_position.y;
       scrollbar_y = clamp(scrollbar_y, 0.f, scrollbar_range);
       scrollbar_rect =
@@ -79,14 +72,13 @@ void Container::start_frame(DuiState *s, Input *input, i64 current_frame)
           (-last_frame_minimum_content_span.y + content_rect.height);
     }
 
-    push_rounded_rect(parent.get()->root.get()->dl, &s->gdld,
-                      scrollbar_area_rect, scrollbar_rect.width / 2.f,
+    push_rounded_rect(&s->dl, z, scrollbar_area_rect, scrollbar_rect.width / 2.f,
                       {color.r, color.g, color.b, .5});
-    push_rounded_rect(parent.get()->root.get()->dl, &s->gdld, scrollbar_rect,
-                      scrollbar_rect.width / 2.f, color);
+    push_rounded_rect(&s->dl, z, scrollbar_rect, scrollbar_rect.width / 2.f,
+                      color);
 
-    if (has_scrollwheel_focus && !input->keys[(i32)Keys::LSHIFT]) {
-      scroll_offset_target.y += input->scrollwheel_count * 100.f;
+    if (has_scrollwheel_focus && !s->input->keys[(i32)Keys::LSHIFT]) {
+      scroll_offset_target.y += s->input->scrollwheel_count * 100.f;
     }
   }
   if (last_frame_minimum_content_span.x > content_rect.width) {
@@ -109,8 +101,7 @@ void Container::start_frame(DuiState *s, Input *input, i64 current_frame)
              scrollbar_width, SCROLLBAR_SIZE};
 
     DuiId horizontal_scrollbar_id = extend_hash(id, "horizontal_scrollbar");
-    b8 hot      = do_hot(horizontal_scrollbar_id, scrollbar_area_rect,
-                         parent.get()->root.get());
+    b8 hot      = do_hot(horizontal_scrollbar_id, scrollbar_area_rect, this);
     b8 active   = do_active(horizontal_scrollbar_id);
     b8 dragging = do_dragging(horizontal_scrollbar_id);
     if (hot) {
@@ -118,14 +109,14 @@ void Container::start_frame(DuiState *s, Input *input, i64 current_frame)
     }
     if (s->just_started_being_dragging == horizontal_scrollbar_id) {
       s->dragging_start_local_position.x =
-          input->mouse_pos.x - scrollbar_rect.x;
+          s->input->mouse_pos.x - scrollbar_rect.x;
       if (s->dragging_start_local_position.x < 0 ||
           s->dragging_start_local_position.x > scrollbar_rect.width) {
         s->dragging_start_local_position.x = scrollbar_rect.width / 2;
       }
     }
     if (dragging) {
-      scrollbar_x += (input->mouse_pos.x - scrollbar_rect.x) -
+      scrollbar_x += (s->input->mouse_pos.x - scrollbar_rect.x) -
                      s->dragging_start_local_position.x;
       scrollbar_x = clamp(scrollbar_x, 0.f, scrollbar_range);
       scrollbar_rect =
@@ -138,14 +129,13 @@ void Container::start_frame(DuiState *s, Input *input, i64 current_frame)
           (-last_frame_minimum_content_span.x + content_rect.width);
     }
 
-    push_rounded_rect(parent.get()->root.get()->dl, &s->gdld,
-                      scrollbar_area_rect, scrollbar_rect.height / 2.f,
+    push_rounded_rect(&s->dl, z, scrollbar_area_rect, scrollbar_rect.height / 2.f,
                       {color.r, color.g, color.b, .5});
-    push_rounded_rect(parent.get()->root.get()->dl, &s->gdld, scrollbar_rect,
-                      scrollbar_rect.height / 2.f, color);
+    push_rounded_rect(&s->dl, z, scrollbar_rect, scrollbar_rect.height / 2.f,
+                      color);
 
-    if (has_scrollwheel_focus && input->keys[(i32)Keys::LSHIFT]) {
-      scroll_offset_target.x += input->scrollwheel_count * 100.f;
+    if (has_scrollwheel_focus && s->input->keys[(i32)Keys::LSHIFT]) {
+      scroll_offset_target.x += s->input->scrollwheel_count * 100.f;
     }
   }
 
@@ -155,12 +145,12 @@ void Container::start_frame(DuiState *s, Input *input, i64 current_frame)
   scroll_offset = (scroll_offset + scroll_offset_target) / 2.f;
 
   s->cc = id;
-  push_scissor(&s->gdld, content_rect);
+  push_scissor(&s->dl, content_rect);
 }
 
 void Container::end_frame(DuiState *s)
 {
-  pop_scissor(&s->gdld);
+  pop_scissor(&s->dl);
   s->cc = -1;
 }
 

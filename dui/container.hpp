@@ -16,6 +16,7 @@ struct Container {
   StaticString<128> title;
 
   GroupId parent = -1;
+  i32 z = -1;
 
   Vec2f scroll_offset_target = {0, 0};
   Vec2f scroll_offset        = {0, 0};
@@ -60,7 +61,7 @@ struct Container {
     return rect;
   }
 
-  void start_frame(DuiState *s, Input *input, i64 current_frame);
+  void start_frame(DuiState *s);
   void end_frame(DuiState *s);
 
   Rect place(Vec2f size, b8 commit = true, b8 fill = false)

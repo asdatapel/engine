@@ -166,7 +166,6 @@ void add_root_group(Group *g)
   i32 index = s.root_groups.insert(0, g->id);
   g->parent = -1;
   g->root   = g->id;
-  g->dl     = &s.draw_lists[index];
 }
 
 void remove_root_group(Group *g)
@@ -239,7 +238,10 @@ b8 contained_in(Group *g, Group *in)
 
 void propagate_groups(Group *g, GroupId root = -1, Group *parent = nullptr)
 {
-  if (parent) g->parent = parent->id;
+  if (parent) {
+    g->parent = parent->id;
+    g->z      = parent->z;
+  }
 
   g->root = root.valid() ? root : g->id;
 
@@ -272,6 +274,7 @@ void propagate_groups(Group *g, GroupId root = -1, Group *parent = nullptr)
       Container *c = get_container(g->windows[i]);
       c->parent    = g->id;
       c->rect      = g->get_window_rect();
+      c->z         = g->z;
     }
   }
 }
@@ -615,9 +618,9 @@ Group *handle_dragging_group(Group *g, DuiId id)
                             b8 already_found_hot) -> b8 {
     DuiId hot = do_hot(control_id, rect);
     if (hot)
-      push_rect(&s.forground_dl, &s.gdld, rect, l_dark);
+      push_rect(&s.dl, 0, rect, l_dark);
     else
-      push_rect(&s.forground_dl, &s.gdld, rect, l);
+      push_rect(&s.dl, 0, rect, l);
 
     if (hot && !already_found_hot) {
       Rect preview_rect = target_group->rect;
@@ -629,8 +632,7 @@ Group *handle_dragging_group(Group *g, DuiId id)
         if (dir) preview_rect.x += preview_rect.width;
       }
 
-      push_rect(&s.forground_dl, &s.gdld, preview_rect,
-                {1, 1, 1, .5});  // preview
+      push_rect(&s.dl, 0, preview_rect, {1, 1, 1, .5});  // preview
       if (s.just_stopped_being_dragging == dragging_id) {
         s.snap_group_to_snap = {true, g->id, target_group->id, axis, dir};
       }
@@ -734,37 +736,17 @@ Group *handle_dragging_group(Group *g, DuiId id)
 
       DuiId hot = do_hot(center_dock_control_id, center_dock_control_rect);
       if (hot)
-        push_rect(&s.forground_dl, &s.gdld, center_dock_control_rect, l_dark);
+        push_rect(&s.dl, 0, center_dock_control_rect, l_dark);
       else
-        push_rect(&s.forground_dl, &s.gdld, center_dock_control_rect, l);
+        push_rect(&s.dl, 0, center_dock_control_rect, l);
 
       if (hot && !already_found_hot) {
-        push_rect(&s.forground_dl, &s.gdld, target_group->rect,
-                  {1, 1, 1, .5});  // preview
+        push_rect(&s.dl, 0, target_group->rect, {1, 1, 1, .5});  // preview
         already_found_hot = true;
 
         if (s.just_stopped_being_dragging == id) {
-          Group *empty_group             = s.empty_group.get();
-          empty_group->splits            = g->splits;
-          empty_group->split_axis        = g->split_axis;
-          empty_group->windows           = g->windows;
-          empty_group->active_window_idx = g->active_window_idx;
-
-          propagate_groups(empty_group);
-
-          Group *first_leaf_node = empty_group;
-          while (!first_leaf_node->is_leaf()) {
-            first_leaf_node = first_leaf_node->splits[0].child.get();
-          }
-          s.empty_group = first_leaf_node->id;
-
-          if (empty_group->parent.valid()) {
-            merge_splits(empty_group->parent.get());
-          }
-
-          free_group(g);
-
-          return empty_group;
+          s.snap_group_to_snap = {true, g->id, target_group->id, -1, false};
+          return g;
         }
       }
     }
@@ -773,8 +755,7 @@ Group *handle_dragging_group(Group *g, DuiId id)
         (target_group->id != s.empty_group ||
          target_group->windows.size != 0) &&
         in_rect(s.input->mouse_pos, target_group->get_titlebar_full_rect())) {
-      push_rect(&s.forground_dl, &s.gdld, target_group->rect,
-                {1, 1, 1, .5});  // preview
+      push_rect(&s.dl, 0, target_group->rect, {1, 1, 1, .5});  // preview
       already_found_hot = true;
 
       if (s.just_stopped_being_dragging == id) {
@@ -810,12 +791,10 @@ void draw_group_and_children(Group *g)
   Rect group_border_rect           = g->get_border_rect();
   Rect window_rect                 = g->get_window_rect();
 
-  DrawList *dl = g->root.get()->dl;
-
-  push_rect(dl, &s.gdld, titlebar_rect, d);
-  push_rect(dl, &s.gdld, titlebar_bottom_border_rect, d_light);
-  push_rect(dl, &s.gdld, group_border_rect, d);
-  push_rect(dl, &s.gdld, window_rect, d_dark);
+  push_rect(&s.dl, g->z, titlebar_rect, d);
+  push_rect(&s.dl, g->z, titlebar_bottom_border_rect, d_light);
+  push_rect(&s.dl, g->z, group_border_rect, d);
+  push_rect(&s.dl, g->z, window_rect, d_dark);
 
   f32 combined_extra_desired_tab_space =
       g->get_combined_extra_desired_tab_space();
@@ -836,13 +815,13 @@ void draw_group_and_children(Group *g)
       tab_color = d_light;
     }
 
-    push_rounded_rect(dl, &s.gdld, tab_rect, 3.f, tab_color, CornerMask::TOP);
+    push_rounded_rect(&s.dl, g->z, tab_rect, 3.f, tab_color, CornerMask::TOP);
 
-    push_scissor(&s.gdld, tab_rect);
-    push_vector_text(dl, &s.gdld, w->title,
+    push_scissor(&s.dl, tab_rect);
+    push_vector_text(&s.dl, g->z, w->title,
                      tab_rect.xy() + Vec2f{TAB_MARGIN, TAB_MARGIN},
                      {1, 1, 1, 1}, tab_rect.height - (TAB_MARGIN * 2));
-    pop_scissor(&s.gdld);
+    pop_scissor(&s.dl);
   }
 }
 
@@ -1372,37 +1351,51 @@ void start_frame(Input *input, Platform::GlfwWindow *window)
 
   s.cursor_shape = Platform::CursorShape::NORMAL;
 
-  draw_system_start_frame(&s.gdld);
-  clear_draw_list(&s.forground_dl);
-  clear_draw_list(&s.main_dl);
-  for (i32 i = 0; i < s.draw_lists.size; i++) {
-    clear_draw_list(&s.draw_lists[i]);
-  }
+  draw_system_start_frame(&s.dl);
 
   if (s.menubar_visible) {
     s.canvas.y += MENUBAR_HEIGHT;
     s.canvas.height -= MENUBAR_HEIGHT;
 
     Rect menubar_rect = {0, 0, s.window_span.x, MENUBAR_HEIGHT};
-    push_rect(&s.forground_dl, &s.gdld, menubar_rect, d);
+    push_rect(&s.dl, 0, menubar_rect, d);
 
     String menuitems[]           = {"File", "Edit", "View", "Window"};
     f32 next_menubar_item_offset = MENUBAR_MARGIN;
     for (i32 i = 0; i < 4; i++) {
-      push_vector_text(&s.forground_dl, &s.gdld, menuitems[i],
+      push_vector_text(&s.dl, 0, menuitems[i],
                        {next_menubar_item_offset, MENUBAR_MARGIN}, {1, 1, 1, 1},
                        MENUBAR_FONT_SIZE);
 
       next_menubar_item_offset +=
-          s.gdld.vfont.get_text_width(menuitems[i], MENUBAR_FONT_SIZE) +
+          s.dl.vfont.get_text_width(menuitems[i], MENUBAR_FONT_SIZE) +
           MENUBAR_MARGIN * 2;
     }
   }
 
   // handle pending changes
   if (s.snap_group_to_snap.need_to) {
-    snap_group(s.snap_group_to_snap.g.get(), s.snap_group_to_snap.target.get(),
-               s.snap_group_to_snap.axis, s.snap_group_to_snap.dir);
+    if (s.snap_group_to_snap.axis != -1) {
+      snap_group(s.snap_group_to_snap.g.get(),
+                 s.snap_group_to_snap.target.get(), s.snap_group_to_snap.axis,
+                 s.snap_group_to_snap.dir);
+    } else {
+      Group *g           = s.snap_group_to_snap.g.get();
+      Group *empty_group = s.empty_group.get();
+
+      empty_group->splits            = g->splits;
+      empty_group->split_axis        = g->split_axis;
+      empty_group->windows           = g->windows;
+      empty_group->active_window_idx = g->active_window_idx;
+
+      Group *first_leaf_node = empty_group;
+      while (!first_leaf_node->is_leaf()) {
+        first_leaf_node = first_leaf_node->splits[0].child.get();
+      }
+      s.empty_group = first_leaf_node->id;
+
+      free_group(g);
+    }
   }
   s.snap_group_to_snap.need_to = false;
 
@@ -1453,13 +1446,14 @@ void start_frame(Input *input, Platform::GlfwWindow *window)
 
   // one pass to propagate changes
   for (i32 i = 0; i < s.root_groups.size; i++) {
-    propagate_groups(s.root_groups[i].get());
+    Group *root_group = s.root_groups[i].get();
+    root_group->z     = i + 1;
+    propagate_groups(root_group);
   }
 
   // one pass for drawing, in reverse z order
   for (i32 i = s.root_groups.size - 1; i >= 0; i--) {
     Group *g = s.root_groups[i].get();
-    g->dl    = &s.draw_lists[i];
     draw_group_and_children(g);
   }
 
@@ -1468,13 +1462,7 @@ void start_frame(Input *input, Platform::GlfwWindow *window)
 
 void end_frame(Platform::GlfwWindow *window, Device *device, Pipeline pipeline)
 {
-  for (i32 i = s.root_groups.size - 1; i >= 0; i--) {
-    draw_draw_list(s.root_groups[i].get()->dl, &s.gdld, device, pipeline,
-                   s.window_span, s.frame);
-  }
-  draw_draw_list(&s.main_dl, &s.gdld, device, pipeline, s.window_span, s.frame);
-  draw_draw_list(&s.forground_dl, &s.gdld, device, pipeline, s.window_span,
-                 s.frame);
+  draw_system_end_frame(&s.dl, device, pipeline, s.window_span, s.frame);
 }
 
 DuiId start_window(String name, Rect initial_rect)
@@ -1486,12 +1474,18 @@ DuiId start_window(String name, Rect initial_rect)
     return id;
   }
 
-  Container *w = s.containers.wrapped_exists(id)
+  Container *c = s.containers.wrapped_exists(id)
                      ? &s.containers.wrapped_get(id)
                      : create_new_window(id, name, initial_rect);
-  w->start_frame(&s, s.input, s.frame);
+  s.cw         = c->id;
 
-  s.cw = w->id;
+  Group *parent                  = c->parent.get();
+  DuiId parents_active_window_id = parent->windows[parent->active_window_idx];
+  if (parents_active_window_id != id) {
+    return id;
+  }
+
+  c->start_frame(&s);
 
   return id;
 }
@@ -1559,11 +1553,10 @@ b8 button(String text, Vec2f size, Color color, b8 fill = false)
 
   if (hot) color = darken(color, .1f);
 
-  push_rounded_rect(c->parent.get()->root.get()->dl, &s.gdld, rect, 5.f, color);
-  push_rounded_rect(c->parent.get()->root.get()->dl, &s.gdld, inset(rect, 1.5f),
-                    5.f, darken(color, .2f));
-  push_vector_text_centered(c->parent.get()->root.get()->dl, &s.gdld, text,
-                            rect.center(), {1, 1, 1, 1}, 21, {true, true});
+  push_rounded_rect(&s.dl, c->z, rect, 5.f, color);
+  push_rounded_rect(&s.dl, c->z, inset(rect, 1.5f), 5.f, darken(color, .2f));
+  push_vector_text_centered(&s.dl, c->z, text, rect.center(), {1, 1, 1, 1}, 21,
+                            {true, true});
 
   return clicked;
 }
@@ -1575,8 +1568,7 @@ void texture(Vec2f size, u32 texture_id)
 
   Rect rect = c->place(size, true);
 
-  push_texture_rect(c->parent.get()->root.get()->dl, &s.gdld, rect,
-                    {0, 0, 1, 1}, texture_id);
+  push_texture_rect(&s.dl, c->z, rect, {0, 0, 1, 1}, texture_id);
 }
 
 template <u64 N>
@@ -1614,10 +1606,10 @@ void text_input(StaticString<N> *str)
 
   f32 font_size = CONTENT_FONT_HEIGHT;
 
-  f32 cursor_pos = text_pos + s.gdld.vfont.get_text_width(
+  f32 cursor_pos = text_pos + s.dl.vfont.get_text_width(
                                   str->to_str().sub(0, cursor_idx), font_size);
   f32 highlight_start_pos =
-      text_pos + s.gdld.vfont.get_text_width(
+      text_pos + s.dl.vfont.get_text_width(
                      str->to_str().sub(0, highlight_start_idx), font_size);
   if (cursor_pos < rect.x) {
     // add one just to make sure cursor is fully in the rect.
@@ -1645,7 +1637,7 @@ void text_input(StaticString<N> *str)
 
   if (selected) {
     if (clicked) {
-      cursor_idx = s.gdld.vfont.char_index_at_pos(
+      cursor_idx = s.dl.vfont.char_index_at_pos(
           str->to_str(), {text_pos, rect.y + (rect.height / 2)},
           s.input->mouse_pos, font_size);
       reset_cursor();
@@ -1654,7 +1646,7 @@ void text_input(StaticString<N> *str)
       if (s.just_started_being_dragging == id) {
         highlight_start_idx = cursor_idx;
       }
-      cursor_idx = s.gdld.vfont.char_index_at_pos(
+      cursor_idx = s.dl.vfont.char_index_at_pos(
           str->to_str(), {text_pos, rect.y + (rect.height / 2)},
           s.input->mouse_pos, font_size);
     }
@@ -1728,24 +1720,22 @@ void text_input(StaticString<N> *str)
     highlight_start_idx = clamp(highlight_start_idx, 0, str->size);
   }
 
-  DrawList *dl = c->parent.get()->root.get()->dl;
-
   Color color = l_dark;
   if (selected) color = darken(color, .05f);
 
-  push_rect(dl, &s.gdld, border_rect, color);
-  push_rect(dl, &s.gdld, rect, l_dark);
+  push_rect(&s.dl, c->z, border_rect, color);
+  push_rect(&s.dl, c->z, rect, l_dark);
 
-  push_scissor(&s.gdld, border_rect);
+  push_scissor(&s.dl, border_rect);
 
   if (selected && highlight_start_idx != cursor_idx) {
     Rect highlight_rect = {fminf(highlight_start_pos, cursor_pos), rect.y + 3,
                            fabsf(cursor_pos - highlight_start_pos),
                            rect.height - 6};
-    push_rect(dl, &s.gdld, highlight_rect, highlight);
+    push_rect(&s.dl, c->z, highlight_rect, highlight);
   }
 
-  push_vector_text_centered(dl, &s.gdld, str->to_str(),
+  push_vector_text_centered(&s.dl, c->z, str->to_str(),
                             {text_pos, rect.y + (rect.height / 2)},
                             {1, 1, 1, 1}, font_size, {false, true});
 
@@ -1753,9 +1743,9 @@ void text_input(StaticString<N> *str)
     Rect cursor_rect = {floorf(cursor_pos), rect.y + 3, 1.25f, rect.height - 6};
     Color cursor_color = highlight;
     cursor_color.a     = 1.f - (f32)((i32)(cursor_blink_time * 1.5) % 2);
-    push_rect(dl, &s.gdld, cursor_rect, cursor_color);
+    push_rect(&s.dl, c->z, cursor_rect, cursor_color);
   }
-  pop_scissor(&s.gdld);
+  pop_scissor(&s.dl);
 
   if (selected) {
     s.cursor_idx          = cursor_idx;
@@ -1766,14 +1756,7 @@ void text_input(StaticString<N> *str)
 
 API void api_init_dui(Device *device, Pipeline pipeline)
 {
-  init_draw_system(&s.gdld, device, pipeline);
-
-  init_draw_list(&s.main_dl, device);
-  init_draw_list(&s.forground_dl, device);
-  for (i32 i = 0; i < s.draw_lists.MAX_SIZE; i++) {
-    s.draw_lists.push_back({});
-    init_draw_list(&s.draw_lists[i], device);
-  }
+  init_draw_system(&s.dl, device, pipeline);
 
   s.empty_group      = create_group(nullptr, {})->id;
   s.fullscreen_group = s.empty_group;
@@ -1849,7 +1832,7 @@ API void api_debug_ui_test(Device *device, Pipeline pipeline, Input *input,
     image_view = create_image_view(device, image_buf, VK_FORMAT_R8G8B8A8_UNORM);
     sampler    = create_sampler(device, false, false);
 
-    texture_id = push_texture(device, &s.gdld, image_view, sampler);
+    texture_id = push_texture(device, &s.dl, image_view, sampler);
   }
 
   upload_image(device, image_buf, image);
@@ -1868,15 +1851,16 @@ API void api_debug_ui_test(Device *device, Pipeline pipeline, Input *input,
   //   window->title     = String("Popup");
   //   s.popups.push_back(id);
 
-  //   window->rect = {s.canvas.width / 3, s.canvas.height / 3, s.canvas.width / 3,
+  //   window->rect = {s.canvas.width / 3, s.canvas.height / 3,
+  //   s.canvas.width / 3,
   //                   s.canvas.height / 3};
   // }
   // for (i32 i = 0; i < s.popups.size; i++) {
   //   DuiId cid    = s.popups[i];
   //   Container *c = get_container(cid);
   //   c->start_frame(&s, input, s.frame);
-  //   if (button("POPUP", {200, 30}, l_dark, true)) info("test8");
-  //   c->end_frame(&s);
+  //   if (button("POPUP", {200, 30}, l_dark, true))
+  //   info("test8"); c->end_frame(&s);
   // }
 
   end_frame(window, device, pipeline);
