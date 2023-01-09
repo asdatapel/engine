@@ -18,6 +18,22 @@ DuiId hash(String str)
 
   return hash;
 }
+
+DuiId hash(String str1, String str2)
+{
+  u64 hash = 5381;
+  for (int i = 0; i < str1.size; i++) {
+    int c = str1.data[i];
+    hash  = ((hash << 5) + hash) + c;
+  }
+  for (int i = 0; i < str2.size; i++) {
+    int c = str2.data[i];
+    hash  = ((hash << 5) + hash) + c;
+  }
+
+  return hash;
+}
+
 DuiId extend_hash(u64 hash, String str)
 {
   for (int i = 0; i < str.size; i++) {
@@ -25,6 +41,11 @@ DuiId extend_hash(u64 hash, String str)
     hash  = ((hash << 5) + hash) + c;
   }
   return hash;
+}
+
+DuiId extend_hash(u64 hash1, u64 hash2)
+{
+  return ((hash1 << 5) + hash1) + hash2;
 }
 
 #define INTERACTION_STATE(var)                     \

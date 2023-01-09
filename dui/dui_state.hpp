@@ -12,6 +12,13 @@
 
 namespace Dui
 {
+
+struct Popup {
+  Container container;
+  RoundedRectPrimitive *outline_rect;
+  RoundedRectPrimitive *background_rect;
+};
+
 struct DuiState {
   StaticPool<Container, 1024> containers;
   StaticPool<Group, 1024> groups;
@@ -23,20 +30,25 @@ struct DuiState {
   DrawList dl;
 
   // currently being worked on
-  GroupId cg = -1;
-  DuiId cw   = -1;
-  DuiId cc   = -1;
+  // pointers because they don't persist between frames
+  Group *cg     = nullptr;
+  Container *cw = nullptr;
+  Container *cc = nullptr;
 
-  StaticStack<DuiId, 256> popups; 
+  Array<Popup, 256> popups;
+  i32 started_popups_count = 0;
+  b8 clear_popups          = false;
+  DuiId previously_selected = -1;
 
   Input *input = nullptr;
 
   Vec2f window_span;
   Rect canvas;
-  i64 frame                           = 0;
+  i64 frame = 0;
 
   GroupId top_root_group_at_mouse_pos = -1;
-  DuiId top_container_at_mouse_pos = -1;
+  DuiId top_container_at_mouse_pos    = -1;
+  b8 top_container_is_popup = false;
 
   b8 menubar_visible = true;
 
@@ -53,7 +65,7 @@ struct DuiState {
   i32 cursor_idx          = 0;
   i32 highlight_start_idx = 0;
   f32 text_pos            = 0.f;
-
+  StaticString<256> clipboard;
 
   Platform::CursorShape cursor_shape;
 
@@ -62,7 +74,7 @@ struct DuiState {
     b8 need_to = false;
     GroupId g;
     GroupId target;
-    i32 axis; // -1 for center, used only for replacing the empty group
+    i32 axis;  // -1 for center, used only for replacing the empty group
     b8 dir;
   };
   SnapGroupArgs snap_group_to_snap;

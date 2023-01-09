@@ -18,7 +18,7 @@ const f32 WINDOW_CONTROL_WIDTH          = 10.f;
 const f32 WINDOW_MARGIN_SIZE            = 4.f;
 const f32 SCROLLBAR_WIDTH               = 8.f;
 const f32 DOCK_CONTROLS_WIDTH           = 100.f;
-const f32 LINE_GAP                      = 5.f;
+const f32 DEFAULT_LINE_GAP              = 5.f;
 const f32 CONTENT_FONT_HEIGHT           = 16.f;
 
 const f32 DEFAULT_TAB_WIDTH = 64.f;
@@ -60,7 +60,7 @@ struct Group {
 
   // cache to prevent walking up the tree constantly
   GroupId root = -1;
-  i32 z = -1;
+  i32 z        = -1;
 
   // Either split into children groups...
   i32 split_axis = -1;

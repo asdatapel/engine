@@ -22,7 +22,7 @@ Color d_dark  = Color::from_int(0x011f4b);  //{0, 0.13725, 0.27843, 1};
 Color d       = Color::from_int(0x03396c);  //{0, 0.2, 0.4, 1};
 Color d_light = Color::from_int(0x005b96);  //{0, 0.24706, 0.4902, 1};
 Color l_light = Color::from_int(0x19578a);  //{1, 0.55686, 0, 1};
-Color l       = Color::from_int(0x2F70AF);  //{0.99216, 0.46667, 0.00784, 1};
+Color l       = Color::from_int(0x6497b1);  //{0.99216, 0.46667, 0.00784, 1};
 Color l_dark  = Color::from_int(0x003e71);  //{1, 0.31373, 0.01176, 1};
 
 namespace Dui
@@ -44,10 +44,12 @@ b8 do_hot(DuiId id, Rect rect)
 // for group controls
 b8 do_hot(DuiId id, Rect rect, Group *root_group)
 {
-  b8 is_in_top_group = !s.top_root_group_at_mouse_pos.valid() ||
+  b8 not_blocked_by_container = s.top_container_at_mouse_pos == -1;
+  b8 is_in_top_group          = !s.top_root_group_at_mouse_pos.valid() ||
                        root_group->id == s.top_root_group_at_mouse_pos;
 
-  b8 is_hot = is_in_top_group && in_rect(s.input->mouse_pos, rect);
+  b8 is_hot = not_blocked_by_container && is_in_top_group &&
+              in_rect(s.input->mouse_pos, rect);
   if (is_hot)
     s.set_hot(id);
   else
@@ -94,13 +96,16 @@ b8 do_active(DuiId id)
   return s.was_last_control_active;
 }
 
-b8 do_selected(DuiId id)
+b8 do_selected(DuiId id, b8 on_down = false)
 {
-  if (s.is_hot(id) && s.just_stopped_being_active == id &&
-      s.just_stopped_being_dragging != id) {
+  b8 clicked = s.just_stopped_being_active == id;
+  if (on_down) {
+    clicked = s.just_started_being_active == id;
+  }
+  if (s.is_hot(id) && clicked && s.just_stopped_being_dragging != id) {
     s.set_selected(id);
-  } else if ((s.input->mouse_button_down_events[(i32)MouseButton::LEFT] ||
-              s.input->mouse_button_down_events[(i32)MouseButton::RIGHT]) &&
+  } else if (!s.top_container_is_popup &&
+             s.input->mouse_button_down_events[(i32)MouseButton::LEFT] &&
              s.just_started_being_active != id) {
     s.clear_selected(id);
   }
@@ -776,7 +781,110 @@ Group *handle_dragging_group(Group *g, DuiId id)
 
 namespace Dui
 {
+DuiId popup_id(DuiId id) { return extend_hash(s.started_popups_count, id); }
 
+Popup *get_current_popup()
+{
+  assert(s.started_popups_count > -1);
+
+  if (s.started_popups_count <= s.popups.size) {
+    return &s.popups[s.started_popups_count - 1];
+  }
+  return nullptr;
+}
+
+Popup *get_next_popup()
+{
+  assert(s.started_popups_count > -1);
+
+  if (s.started_popups_count < s.popups.size) {
+    return &s.popups[s.started_popups_count];
+  }
+  return nullptr;
+}
+
+b8 is_popup_open(DuiId id)
+{
+  id                   = popup_id(id);
+  Popup *current_popup = get_next_popup();
+  return (current_popup && id == current_popup->container.id);
+}
+b8 is_popup_open(String name) { return is_popup_open(hash(name)); }
+
+void clear_popups()
+{
+  s.clear_popups = true;
+
+  s.selected = s.previously_selected;
+}
+
+void close_child_popups() { s.popups.resize(s.started_popups_count); }
+
+void open_popup(DuiId id, Vec2f pos, f32 width)
+{
+  // clear all popups beyond what is already started
+  close_child_popups();
+
+  if (s.popups.size == 0) {
+    s.previously_selected = s.selected;
+  }
+
+  Popup *p        = &s.popups[s.popups.push_back({})];
+  p->container.id = popup_id(id);
+  p->container.z  = 0;
+
+  p->container.rect = {pos.x, pos.y, width, 20};
+}
+void open_popup(String name, Vec2f pos, f32 width)
+{
+  open_popup(hash(name), pos, width);
+}
+
+b8 start_popup(DuiId id)
+{
+  id                   = popup_id(id);
+  Popup *current_popup = get_next_popup();
+  if (!current_popup || id != current_popup->container.id) return false;
+
+  current_popup->container.start_frame(&s, false);
+
+  push_base_scissor(&s.dl);
+  current_popup->outline_rect    = push_rounded_rect(&s.dl, 0, {}, 2, d_light);
+  current_popup->background_rect = push_rounded_rect(&s.dl, 0, {}, 2, d);
+
+  s.started_popups_count++;
+
+  return true;
+}
+b8 start_popup(String name) { return start_popup(hash(name)); }
+
+void end_popup()
+{
+  s.cc->expand_rect_to_content();
+  s.cc->end_frame(&s, false);
+
+  pop_scissor(&s.dl);
+
+  Popup *current_popup = get_current_popup();
+  if (current_popup->outline_rect)
+    current_popup->outline_rect->dimensions = current_popup->container.rect;
+  if (current_popup->background_rect)
+    current_popup->background_rect->dimensions =
+        inset(current_popup->container.rect, 1);
+
+  s.started_popups_count--;
+
+  // kinda hacky, need to resume the container from the previous popup layer
+  if (s.started_popups_count > 0) {
+    s.cc = &s.popups[s.started_popups_count - 1].container;
+  } else {
+    s.cc = s.cw;
+  }
+}
+}  // namespace Dui
+
+namespace Dui
+{
 void draw_group_and_children(Group *g)
 {
   if (!g->is_leaf()) {
@@ -789,12 +897,10 @@ void draw_group_and_children(Group *g)
   Rect titlebar_rect               = g->get_titlebar_full_rect();
   Rect titlebar_bottom_border_rect = g->get_titlebar_bottom_border_rect();
   Rect group_border_rect           = g->get_border_rect();
-  Rect window_rect                 = g->get_window_rect();
 
   push_rect(&s.dl, g->z, titlebar_rect, d);
   push_rect(&s.dl, g->z, titlebar_bottom_border_rect, d_light);
   push_rect(&s.dl, g->z, group_border_rect, d);
-  push_rect(&s.dl, g->z, window_rect, d_dark);
 
   f32 combined_extra_desired_tab_space =
       g->get_combined_extra_desired_tab_space();
@@ -883,7 +989,7 @@ void start_frame_for_leaf(Group *g)
 
 void start_frame_for_group(Group *g)
 {
-  s.cg = g->id;
+  s.cg = g;
 
   if (s.fullscreen_group == g->id) {
     g->rect = s.canvas;
@@ -1324,7 +1430,7 @@ void start_frame_for_group(Group *g)
     }
   }
 
-  s.cg = -1;
+  s.cg = nullptr;
 
   for (i32 i = 0; i < g->splits.size; i++) {
     start_frame_for_group(g->splits[i].child.get());
@@ -1356,21 +1462,6 @@ void start_frame(Input *input, Platform::GlfwWindow *window)
   if (s.menubar_visible) {
     s.canvas.y += MENUBAR_HEIGHT;
     s.canvas.height -= MENUBAR_HEIGHT;
-
-    Rect menubar_rect = {0, 0, s.window_span.x, MENUBAR_HEIGHT};
-    push_rect(&s.dl, 0, menubar_rect, d);
-
-    String menuitems[]           = {"File", "Edit", "View", "Window"};
-    f32 next_menubar_item_offset = MENUBAR_MARGIN;
-    for (i32 i = 0; i < 4; i++) {
-      push_vector_text(&s.dl, 0, menuitems[i],
-                       {next_menubar_item_offset, MENUBAR_MARGIN}, {1, 1, 1, 1},
-                       MENUBAR_FONT_SIZE);
-
-      next_menubar_item_offset +=
-          s.dl.vfont.get_text_width(menuitems[i], MENUBAR_FONT_SIZE) +
-          MENUBAR_MARGIN * 2;
-    }
   }
 
   // handle pending changes
@@ -1399,36 +1490,14 @@ void start_frame(Input *input, Platform::GlfwWindow *window)
   }
   s.snap_group_to_snap.need_to = false;
 
-  // figure out the top groups first
-  s.top_root_group_at_mouse_pos     = -1;
-  i32 top_root_group_at_mouse_pos_z = -1;
-  for (i32 i = 0; i < s.root_groups.size; i++) {
-    Rect rect          = s.root_groups[i].get()->rect;
-    Rect oversize_rect = {rect.x - RESIZE_HANDLES_OVERSIZE,
-                          rect.y - RESIZE_HANDLES_OVERSIZE,
-                          rect.width + RESIZE_HANDLES_OVERSIZE * 2,
-                          rect.height + RESIZE_HANDLES_OVERSIZE * 2};
-    if (in_rect(s.input->mouse_pos, oversize_rect)) {
-      s.top_root_group_at_mouse_pos = s.root_groups[i];
-      top_root_group_at_mouse_pos_z = i;
-      break;
-    }
-  }
-  if (s.input->mouse_button_down_events[(i32)MouseButton::LEFT]) {
-    if (top_root_group_at_mouse_pos_z != -1) {
-      Group *g = s.root_groups[top_root_group_at_mouse_pos_z].get();
-      if (g->id != s.fullscreen_group) {
-        s.root_groups.shift_delete(top_root_group_at_mouse_pos_z);
-        s.root_groups.insert(0, g->id);
-      }
-    }
-  }
-
+  // figure out the top groups and containers first
   s.top_container_at_mouse_pos = -1;
+  s.top_container_is_popup     = false;
   for (i32 i = 0; i < s.popups.size; i++) {
-    Container *popup_c = get_container(s.popups[i]);
+    Container *popup_c = &s.popups[i].container;
     if (in_rect(s.input->mouse_pos, popup_c->rect)) {
-      s.top_container_at_mouse_pos = s.popups[i];
+      s.top_container_at_mouse_pos = popup_c->id;
+      s.top_container_is_popup     = true;
     }
   }
   if (s.top_container_at_mouse_pos == -1 &&
@@ -1436,6 +1505,32 @@ void start_frame(Input *input, Platform::GlfwWindow *window)
     s.top_container_at_mouse_pos =
         s.top_root_group_at_mouse_pos.get()->get_child_at_pos(
             s.input->mouse_pos);
+  }
+
+  s.top_root_group_at_mouse_pos     = -1;
+  i32 top_root_group_at_mouse_pos_z = -1;
+  if (!s.top_container_is_popup) {
+    for (i32 i = 0; i < s.root_groups.size; i++) {
+      Rect rect          = s.root_groups[i].get()->rect;
+      Rect oversize_rect = {rect.x - RESIZE_HANDLES_OVERSIZE,
+                            rect.y - RESIZE_HANDLES_OVERSIZE,
+                            rect.width + RESIZE_HANDLES_OVERSIZE * 2,
+                            rect.height + RESIZE_HANDLES_OVERSIZE * 2};
+      if (in_rect(s.input->mouse_pos, oversize_rect)) {
+        s.top_root_group_at_mouse_pos = s.root_groups[i];
+        top_root_group_at_mouse_pos_z = i;
+        break;
+      }
+    }
+    if (s.input->mouse_button_down_events[(i32)MouseButton::LEFT]) {
+      if (top_root_group_at_mouse_pos_z != -1) {
+        Group *g = s.root_groups[top_root_group_at_mouse_pos_z].get();
+        if (g->id != s.fullscreen_group) {
+          s.root_groups.shift_delete(top_root_group_at_mouse_pos_z);
+          s.root_groups.insert(0, g->id);
+        }
+      }
+    }
   }
 
   // one pass for input handling
@@ -1457,19 +1552,26 @@ void start_frame(Input *input, Platform::GlfwWindow *window)
     draw_group_and_children(g);
   }
 
-  window->set_cursor_shape(s.cursor_shape);
+  if ((!s.top_container_is_popup &&
+       input->mouse_button_down_events[(i32)MouseButton::LEFT]) ||
+      s.clear_popups) {
+    s.popups.clear();
+    s.clear_popups = false;
+  }
 }
 
 void end_frame(Platform::GlfwWindow *window, Device *device, Pipeline pipeline)
 {
   draw_system_end_frame(&s.dl, device, pipeline, s.window_span, s.frame);
+
+  window->set_cursor_shape(s.cursor_shape);
 }
 
 DuiId start_window(String name, Rect initial_rect)
 {
   DuiId id = hash(name);
 
-  if (s.cw != -1) {
+  if (s.cw) {
     warning("starting a window without ending another!");
     return id;
   }
@@ -1477,7 +1579,7 @@ DuiId start_window(String name, Rect initial_rect)
   Container *c = s.containers.wrapped_exists(id)
                      ? &s.containers.wrapped_get(id)
                      : create_new_window(id, name, initial_rect);
-  s.cw         = c->id;
+  s.cw         = c;
 
   Group *parent                  = c->parent.get();
   DuiId parents_active_window_id = parent->windows[parent->active_window_idx];
@@ -1492,15 +1594,104 @@ DuiId start_window(String name, Rect initial_rect)
 
 void end_window()
 {
-  if (s.cc != -1) {
-    get_container(s.cc)->end_frame(&s);
+  if (s.cc) {
+    s.cc->end_frame(&s);
   }
 
   if (s.cw) {
-    s.cw = -1;
+    s.cw = nullptr;
   } else {
     warning("end_window without start_window");
   }
+}
+
+}  // namespace Dui
+
+namespace Dui
+{
+
+f32 MENU_ITEM_HEIGHT = 24;
+
+b8 menu_item_button(DuiId id, String text)
+{
+  Container *c = get_current_container(&s);
+  if (!c) return false;
+
+  id = extend_hash((DuiId)c, id);
+
+  Rect rect = c->place({0, MENU_ITEM_HEIGHT}, true, true, 0);
+
+  b8 hot     = do_hot(id, rect, c);
+  b8 active  = do_active(id);
+  b8 clicked = hot && s.just_stopped_being_active == id;
+
+  if (hot) {
+    push_rounded_rect(&s.dl, c->z, rect, 4.f, {.5, .5, .5, .5});
+    set_cursor_shape(Platform::CursorShape::POINTING_HAND);
+  }
+
+  if (clicked) {
+    clear_popups();
+  }
+
+  Vec2f text_pos  = {rect.x + WINDOW_MARGIN_SIZE, rect.y + WINDOW_MARGIN_SIZE};
+  f32 text_height = MENU_ITEM_HEIGHT - (WINDOW_MARGIN_SIZE * 2);
+  push_vector_text(&s.dl, c->z, text, text_pos, {1, 1, 1, 1}, text_height);
+
+  return clicked;
+}
+b8 menu_item_button(String text) { return menu_item_button(hash(text), text); }
+
+b8 menu_item_submenu(String text, String submenu_name)
+{
+  Container *c = get_current_container(&s);
+  if (!c) return false;
+
+  DuiId id = extend_hash((DuiId)c, text);
+
+  Rect rect           = c->place({0, MENU_ITEM_HEIGHT}, true, true, 0);
+  Rect highlight_rect = inset(rect, 1.f);
+
+  b8 hot     = do_hot(id, rect, c);
+  b8 active  = do_active(id);
+  b8 clicked = hot && s.just_stopped_being_active == id;
+
+  if (hot) {
+    set_cursor_shape(Platform::CursorShape::POINTING_HAND);
+  }
+
+  if (hot || clicked || is_popup_open(submenu_name)) {
+    push_rounded_rect(&s.dl, c->z, rect, 4.f, {.5, .5, .5, .5});
+  }
+
+  Vec2f text_pos  = {rect.x + WINDOW_MARGIN_SIZE, rect.y + WINDOW_MARGIN_SIZE};
+  f32 text_height = MENU_ITEM_HEIGHT - (WINDOW_MARGIN_SIZE * 2);
+  push_vector_text(&s.dl, c->z, text, text_pos, {1, 1, 1, 1}, text_height);
+
+  Vec2f arrow_pos = {rect.right() - WINDOW_MARGIN_SIZE,
+                     rect.y + WINDOW_MARGIN_SIZE};
+  push_vector_text_justified(&s.dl, c->z, ">", arrow_pos, {1, 1, 1, 1},
+                             text_height, {true, false});
+
+  if (clicked) {
+    open_popup(submenu_name, Vec2f(rect.right(), rect.top()), 200);
+  }
+
+  return start_popup(submenu_name);
+}
+
+void menu_divider()
+{
+  Container *c = get_current_container(&s);
+  if (!c) return;
+
+  c->next_line(0);  // make sure we start below other controls
+  Rect rect = c->place({0, 2.5}, true, true, 0);
+
+  rect.x -= WINDOW_MARGIN_SIZE;
+  rect.width += WINDOW_MARGIN_SIZE * 2;
+
+  push_rounded_rect(&s.dl, c->z, rect, 2, d_light);
 }
 
 }  // namespace Dui
@@ -1529,7 +1720,7 @@ b8 button(String text, Vec2f size, Color color, b8 fill = false)
   Container *c = get_current_container(&s);
   if (!c) return false;
 
-  DuiId id = hash(text);
+  DuiId id = extend_hash((DuiId)c, text);
 
   Rect rect = c->place(size, true, fill);
 
@@ -1551,12 +1742,15 @@ b8 button(String text, Vec2f size, Color color, b8 fill = false)
     if (darkenf < 0.f) darken_id = 0;
   }
 
-  if (hot) color = darken(color, .1f);
+  if (hot) {
+    set_cursor_shape(Platform::CursorShape::POINTING_HAND);
+    color = darken(color, .1f);
+  }
 
   push_rounded_rect(&s.dl, c->z, rect, 5.f, color);
   push_rounded_rect(&s.dl, c->z, inset(rect, 1.5f), 5.f, darken(color, .2f));
-  push_vector_text_centered(&s.dl, c->z, text, rect.center(), {1, 1, 1, 1}, rect.height,
-                            {true, true});
+  push_vector_text_centered(&s.dl, c->z, text, rect.center(), {1, 1, 1, 1},
+                            CONTENT_FONT_HEIGHT, {true, true});
 
   return clicked;
 }
@@ -1577,21 +1771,26 @@ void text_input(StaticString<N> *str)
   Container *c = get_current_container(&s);
   if (!c) return;
 
-  DuiId id = (DuiId)str;
+  DuiId id = extend_hash((DuiId)c, (DuiId)str);
 
   f32 height       = CONTENT_FONT_HEIGHT + 4 + 4;
   Rect border_rect = c->place({0, height}, true, true);
-  Rect rect        = inset(border_rect, 1.5f);
+  Rect rect        = inset(border_rect, 1);
 
   b8 hot      = do_hot(id, rect, c);
   b8 active   = do_active(id);
   b8 dragging = do_dragging(id);
-  b8 selected = do_selected(id);
+  b8 selected = do_selected(id, true);
   b8 clicked  = hot && s.just_started_being_active == id;
+
+  if (hot) {
+    set_cursor_shape(Platform::CursorShape::IBEAM);
+  }
 
   i32 cursor_idx          = 0;
   i32 highlight_start_idx = 0;
   f32 text_pos            = rect.x + 3;
+
   if (selected && s.just_started_being_selected != id) {
     cursor_idx          = s.cursor_idx;
     highlight_start_idx = s.highlight_start_idx;
@@ -1605,20 +1804,6 @@ void text_input(StaticString<N> *str)
   }
 
   f32 font_size = CONTENT_FONT_HEIGHT;
-
-  f32 cursor_pos = text_pos + s.dl.vfont.get_text_width(
-                                  str->to_str().sub(0, cursor_idx), font_size);
-  f32 highlight_start_pos =
-      text_pos + s.dl.vfont.get_text_width(
-                     str->to_str().sub(0, highlight_start_idx), font_size);
-  if (cursor_pos < rect.x) {
-    // add one just to make sure cursor is fully in the rect.
-    text_pos += rect.x - cursor_pos + 1;
-  }
-  if (cursor_pos > rect.x + rect.width) {
-    // add one just to make sure cursor is fully in the rect.
-    text_pos -= cursor_pos - (rect.x + rect.width) + 1;
-  }
 
   auto reset_cursor = [&]() {
     highlight_start_idx = cursor_idx;
@@ -1634,23 +1819,45 @@ void text_input(StaticString<N> *str)
       highlight_start_idx = from;
     }
   };
+  auto get_highlighted_text = [&]() {
+    u32 from = std::min(highlight_start_idx, cursor_idx);
+    u32 to   = std::max(highlight_start_idx, cursor_idx);
+
+    return String(str->data + from, to - from);
+  };
+
+  auto copy = [&]() { s.clipboard = get_highlighted_text(); };
+  auto cut  = [&]() {
+    s.clipboard = get_highlighted_text();
+    clear_highlight();
+  };
+  auto paste = [&]() {
+    clear_highlight();
+    for (int i = 0; i < s.clipboard.size; i++) {
+      if (str->size < str->MAX_SIZE) {
+        str->push_middle(s.clipboard[i], cursor_idx);
+        cursor_idx++;
+        reset_cursor();
+      }
+    }
+  };
+
+  if (clicked || s.just_started_being_selected == id) {
+    cursor_idx = s.dl.vfont.char_index_at_pos(
+        str->to_str(), {text_pos, rect.y + (rect.height / 2)},
+        s.input->mouse_pos, font_size);
+    reset_cursor();
+  }
+  if (dragging) {
+    if (s.just_started_being_dragging == id) {
+      highlight_start_idx = cursor_idx;
+    }
+    cursor_idx = s.dl.vfont.char_index_at_pos(
+        str->to_str(), {text_pos, rect.y + (rect.height / 2)},
+        s.input->mouse_pos, font_size);
+  }
 
   if (selected) {
-    if (clicked) {
-      cursor_idx = s.dl.vfont.char_index_at_pos(
-          str->to_str(), {text_pos, rect.y + (rect.height / 2)},
-          s.input->mouse_pos, font_size);
-      reset_cursor();
-    }
-    if (dragging) {
-      if (s.just_started_being_dragging == id) {
-        highlight_start_idx = cursor_idx;
-      }
-      cursor_idx = s.dl.vfont.char_index_at_pos(
-          str->to_str(), {text_pos, rect.y + (rect.height / 2)},
-          s.input->mouse_pos, font_size);
-    }
-
     if (s.input->key_down_events[(i32)Keys::LEFT]) {
       cursor_idx--;
       if (s.input->keys[(i32)Keys::LCTRL]) {
@@ -1708,6 +1915,21 @@ void text_input(StaticString<N> *str)
       reset_cursor();
     }
 
+    if (s.input->keys[(i32)Keys::LCTRL]) {
+      if (s.input->key_down_events[(i32)Keys::C]) {
+        copy();
+      }
+      if (s.input->key_down_events[(i32)Keys::X]) {
+        cut();
+      }
+      if (s.input->key_down_events[(i32)Keys::V]) {
+        paste();
+      }
+    }
+
+    if (s.input->text_input.size > 0) {
+      clear_highlight();
+    }
     for (int i = 0; i < s.input->text_input.size; i++) {
       if (str->size < str->MAX_SIZE) {
         str->push_middle(s.input->text_input[i], cursor_idx);
@@ -1715,15 +1937,45 @@ void text_input(StaticString<N> *str)
         reset_cursor();
       }
     }
-
-    cursor_idx          = clamp(cursor_idx, 0, str->size);
-    highlight_start_idx = clamp(highlight_start_idx, 0, str->size);
   }
 
-  Color color = l_dark;
-  if (selected) color = darken(color, .05f);
+  cursor_idx          = clamp(cursor_idx, 0, str->size);
+  highlight_start_idx = clamp(highlight_start_idx, 0, str->size);
 
-  push_rect(&s.dl, c->z, border_rect, color);
+  if (hot && s.input->mouse_button_down_events[(i32)MouseButton::RIGHT]) {
+    open_popup(id, s.input->mouse_pos, 200);
+  }
+  if (start_popup(id)) {
+    if (menu_item_submenu("Edit", "edit")) {
+      if (menu_item_button("Copy")) {
+        copy();
+      }
+      if (menu_item_button("Cut")) {
+        cut();
+      }
+      if (menu_item_button("Paste")) {
+        paste();
+      }
+      end_popup();
+    }
+
+    menu_divider();
+
+    if (menu_item_button("Undo")) {
+    }
+    if (menu_item_button("Redo")) {
+    }
+
+    end_popup();
+  }
+
+  f32 cursor_pos = text_pos + s.dl.vfont.get_text_width(
+                                  str->to_str().sub(0, cursor_idx), font_size);
+  f32 highlight_start_pos =
+      text_pos + s.dl.vfont.get_text_width(
+                     str->to_str().sub(0, highlight_start_idx), font_size);
+
+  push_rect(&s.dl, c->z, border_rect, selected ? l : d_light);
   push_rect(&s.dl, c->z, rect, l_dark);
 
   push_scissor(&s.dl, border_rect);
@@ -1760,6 +2012,43 @@ API void api_init_dui(Device *device, Pipeline pipeline)
 
   s.empty_group      = create_group(nullptr, {})->id;
   s.fullscreen_group = s.empty_group;
+}
+
+// test menubar stuff
+void submenu2(Vec2f pos);
+
+void submenu(Vec2f pos)
+{
+  if (menu_item_submenu("Go to Definition", "submenu2")) {
+    info("submenu2");
+    submenu2({pos.x + 200, pos.y});
+    end_popup();
+  }
+
+  if (menu_item_button("Peek")) {
+    info("submenu2");
+  }
+}
+
+void submenu2(Vec2f pos)
+{
+  if (menu_item_submenu("Cut", "submenu1")) {
+    info("submenu1");
+    submenu({pos.x + 200, pos.y});
+    end_popup();
+  }
+
+  if (menu_item_submenu("Copy", "submenu2")) {
+    info("submenu2");
+    submenu2({pos.x + 200, pos.y});
+    end_popup();
+  }
+
+  menu_divider();
+
+  if (menu_item_button("Paste")) {
+    info("submenu2");
+  }
 }
 
 API void api_debug_ui_test(Device *device, Pipeline pipeline, Input *input,
@@ -1840,28 +2129,47 @@ API void api_debug_ui_test(Device *device, Pipeline pipeline, Input *input,
 
   end_window();
 
-  // Popups wip
-  // static b8 init = false;
-  // if (!init) {
-  //   init = true;
+  if (s.menubar_visible) {
+    Rect menubar_rect = {0, 0, s.window_span.x, MENUBAR_HEIGHT};
+    push_rect(&s.dl, 0, menubar_rect, d);
 
-  //   DuiId id          = hash("Popup");
-  //   Container *window = s.containers.emplace_wrapped(id, {});
-  //   window->id        = id;
-  //   window->title     = String("Popup");
-  //   s.popups.push_back(id);
+    String menuitems[]           = {"File", "Edit", "View", "Window"};
+    f32 next_menubar_item_offset = MENUBAR_MARGIN;
+    for (i32 i = 0; i < 4; i++) {
+      DuiId menubar_item_id = hash("MenubarItem", menuitems[i]);
 
-  //   window->rect = {s.canvas.width / 3, s.canvas.height / 3,
-  //   s.canvas.width / 3,
-  //                   s.canvas.height / 3};
-  // }
-  // for (i32 i = 0; i < s.popups.size; i++) {
-  //   DuiId cid    = s.popups[i];
-  //   Container *c = get_container(cid);
-  //   c->start_frame(&s, input, s.frame);
-  //   if (button("POPUP", {200, 30}, l_dark, true))
-  //   info("test8"); c->end_frame(&s);
-  // }
+      Rect menubar_item_rect = {
+          next_menubar_item_offset - MENUBAR_MARGIN, MENUBAR_MARGIN,
+          s.dl.vfont.get_text_width(menuitems[i], MENUBAR_FONT_SIZE) +
+              MENUBAR_MARGIN * 2,
+          MENUBAR_FONT_SIZE};
+
+      b8 hot     = do_hot(menubar_item_id, menubar_item_rect);
+      b8 active  = do_active(menubar_item_id);
+      b8 clicked = hot && s.just_stopped_being_active == menubar_item_id;
+
+      if (clicked) {
+        open_popup(menuitems[i], {menubar_item_rect.x, MENUBAR_HEIGHT},
+                   200);
+      }
+
+      if (start_popup(menuitems[i])) {
+        submenu({menubar_item_rect.x + 200, MENUBAR_HEIGHT});
+        end_popup();
+      }
+
+      if (hot) {
+        push_rounded_rect(&s.dl, 0, menubar_item_rect, 4, {.7, .7, .7, .5});
+      }
+      push_vector_text(&s.dl, 0, menuitems[i],
+                       {next_menubar_item_offset, MENUBAR_MARGIN}, {1, 1, 1, 1},
+                       MENUBAR_FONT_SIZE);
+
+      next_menubar_item_offset +=
+          s.dl.vfont.get_text_width(menuitems[i], MENUBAR_FONT_SIZE) +
+          MENUBAR_MARGIN * 2;
+    }
+  }
 
   end_frame(window, device, pipeline);
 }
@@ -1893,6 +2201,47 @@ API void api_reload_plugin(ReloadData reload_data)
 };
 
 }  // namespace Dui
+
+/*
+  if (Dui::PopupOpenerMenuItem("File")) {
+    Dui::OpenPopup("File")
+  }
+  Dui::StartPopup("File", pos, width);
+  if (Dui::MenuButton("New")) {
+    ... // new project / file dialog
+  }
+
+  if(Dui::PopupOpenerMenuItem("Preferences")) {
+    Dui::OpenPopup("Preferences");
+  }
+  Dui::StartPopup("Preferences");
+
+  Dui::EndPopup(); // "Preferences"
+
+
+  Dui::EndPopup(); // "File"
+*/
+
+/*
+  if (Dui::PopupOpenerMenuItem("File")) {
+    Dui::open_popup("File")
+  }
+
+  DuiId popup_id = Dui::start_popup("File", pos, width);
+  if (Dui::MenuButton("New")) {
+    ... // new project / file dialog
+  }
+
+  if(Dui::PopupOpenerMenuItem("Preferences")) {
+    Dui::OpenPopup("Preferences");
+  }
+  Dui::StartPopup("Preferences");
+
+  Dui::EndPopup(); // "Preferences"
+
+
+  Dui::EndPopup(); // "File"
+*/
 
 /*
 {

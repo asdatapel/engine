@@ -116,7 +116,7 @@ struct DrawList {
   i32 max_z = 0;
 };
 
-void push_scissor(DrawList *dl, Rect rect)
+RectPrimitive *push_scissor(DrawList *dl, Rect rect)
 {
   auto to_bounds = [](Rect r) {
     return Vec4f{r.x, r.y, r.x + r.width, r.y + r.height};
@@ -137,11 +137,17 @@ void push_scissor(DrawList *dl, Rect rect)
   dl->primitives.clip_rects[dl->clip_rects_count++] = {rect};
   dl->scissor_idxs.push_back(dl->clip_rects_count - 1);
   dl->scissors.push_back(rect);
+
+  return &dl->primitives.clip_rects[dl->clip_rects_count - 1];
 }
 void pop_scissor(DrawList *dl)
 {
   dl->scissor_idxs.pop();
   dl->scissors.pop();
+}
+void push_base_scissor(DrawList *dl) {
+  dl->scissor_idxs.push_back(0);
+  dl->scissors.push_back(dl->scissors[0]);
 }
 
 u32 push_texture(Device *device, DrawList *dl, VkImageView image_view,
@@ -186,8 +192,9 @@ u32 push_primitive_rounded_rect(DrawList *dl, Rect rect, Color color,
   return dl->rounded_rects_count - 1;
 }
 
-void push_rounded_rect(DrawList *dl, i32 z, Rect rect, f32 corner_radius,
-                       Color color, u32 corner_mask = CornerMask::ALL)
+RoundedRectPrimitive *push_rounded_rect(DrawList *dl, i32 z, Rect rect,
+                                        f32 corner_radius, Color color,
+                                        u32 corner_mask = CornerMask::ALL)
 {
   auto push_rect_vert = [](DrawList *dl, u32 primitive_index, u8 corner) {
     dl->verts[dl->vert_count++] = {(u32)PrimitiveIds::ROUNDED_RECT |
@@ -195,7 +202,7 @@ void push_rounded_rect(DrawList *dl, i32 z, Rect rect, f32 corner_radius,
   };
 
   if (!overlaps(rect, dl->scissors.top())) {
-    return;
+    return nullptr;
   }
 
   u32 primitive_idx =
@@ -209,11 +216,13 @@ void push_rounded_rect(DrawList *dl, i32 z, Rect rect, f32 corner_radius,
   push_rect_vert(dl, primitive_idx, 2);
 
   push_draw_call(dl, 2, z);
+
+  return &dl->primitives.rounded_rects[primitive_idx];
 }
 
-void push_rect(DrawList *dl, i32 z, Rect rect, Color color)
+RoundedRectPrimitive *push_rect(DrawList *dl, i32 z, Rect rect, Color color)
 {
-  push_rounded_rect(dl, z, rect, 0, color);
+  return push_rounded_rect(dl, z, rect, 0, color);
 }
 
 u32 push_primitive_bitmap_glyph(DrawList *dl, Rect rect, Vec4f uv_bounds,
@@ -334,17 +343,34 @@ void push_vector_text(DrawList *dl, i32 z, String text, Vec2f pos, Color color,
   }
 };
 
+void push_vector_text_justified(DrawList *dl, i32 z, String text, Vec2f pos,
+                                Color color, f32 size, Vec2b axes)
+{
+  if (axes.x) {
+    f32 text_width = dl->vfont.get_text_width(text, size);
+    pos.x -= text_width;
+  }
+  if (axes.y) pos.y += size;
+
+  for (int i = 0; i < text.size; i++) {
+    Glyph g = dl->vfont.glyphs[text.data[i]];
+
+    f32 width       = size * g.size.x;
+    f32 height      = size * g.size.y;
+    Rect shape_rect = {pos.x + (size * g.bearing.x),
+                       pos.y + (size * dl->vfont.ascent) - (size * g.bearing.y),
+                       width, height};
+    pos.x += size * g.advance;
+
+    push_vector_glyph(dl, z, shape_rect, dl->vfont.glyphs[text.data[i]], color);
+  }
+};
+
 void push_vector_text_centered(DrawList *dl, i32 z, String text, Vec2f pos,
                                Color color, f32 size, Vec2b center)
 {
   if (center.x) {
-    f32 text_width = 0;
-    for (int i = 0; i < text.size - 1; i++) {
-      Glyph g = dl->vfont.glyphs[text.data[i]];
-      text_width += size * g.advance;
-    }
-    text_width += dl->vfont.glyphs[text.data[text.size - 1]].size.y * size;
-
+    f32 text_width = dl->vfont.get_text_width(text, size);
     pos.x -= text_width / 2;
   }
   if (center.y) pos.y -= size / 2;
@@ -456,9 +482,5 @@ void draw_system_end_frame(DrawList *dl, Device *device, Pipeline pipeline,
     }
   }
 }
-
-// TODO allow pushing a temporary drawcall then can be updated later.
-// Useful for grouping controls with a background
-DrawCall *push_temp();
 
 }  // namespace Dui

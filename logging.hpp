@@ -14,14 +14,14 @@ std::ostream& operator<<(std::ostream& out, String str)
 template <class... Args>
 void fatal(Args... args)
 {
-  (std::cout << ... << args) << "\n";
+  (std::cout << ... << args) << std::endl;
   abort();
 }
 
 template <class... Args>
 void warning(Args... args)
 {
-  (std::cout << ... << args) << "\n";
+  (std::cout << ... << args) << "\n" << std::endl;
 }
 
 template <class... Args>

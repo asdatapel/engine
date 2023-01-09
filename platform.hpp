@@ -16,6 +16,7 @@ enum struct CursorShape {
   NWSE_RESIZE,
   SWNE_RESIZE,
   IBEAM,
+  POINTING_HAND,
   COUNT,
 };
 
@@ -56,6 +57,8 @@ struct GlfwWindow {
         glfwCreateStandardCursor(GLFW_RESIZE_NESW_CURSOR);
     cursors[(i32)CursorShape::IBEAM] =
         glfwCreateStandardCursor(GLFW_IBEAM_CURSOR);
+    cursors[(i32)CursorShape::POINTING_HAND] =
+        glfwCreateStandardCursor(GLFW_POINTING_HAND_CURSOR);
         
 
   }
