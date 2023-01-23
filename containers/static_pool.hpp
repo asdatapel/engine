@@ -21,7 +21,18 @@ struct StaticPool {
   Element elements[SIZE];
   u64 next = 0, last = 0;
 
-  StaticPool()
+  StaticPool() { init(); }
+
+  StaticPool(T init_value)
+  {
+    init();
+
+    for (i32 i = 0; i < SIZE; i++) {
+      elements[i].value = init_value;
+    }
+  }
+
+  void init()
   {
     next = 0;
     last = next;

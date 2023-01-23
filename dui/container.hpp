@@ -59,51 +59,43 @@ struct Container {
     return rect;
   }
 
-  void start_frame(DuiState *s, b8 is_window = true);
-  void end_frame(DuiState *s, b8 is_window = true);
+  void start_frame(DuiState *s, b8 is_popup = false);
+  void end_frame(DuiState *s, b8 is_popup = false);
 
   void expand_rect_to_content();
 
-  Rect place(Vec2f size, b8 commit = true, b8 fill = false, f32 line_gap = DEFAULT_LINE_GAP)
+  Rect place(Vec2f size, b8 commit = true, b8 fill = false,
+             f32 line_gap = DEFAULT_LINE_GAP)
   {
     Vec2f scrolled_cursor = cursor + scroll_offset;
 
-    Rect rect;
-    // if (vertical_layout) {
-    //   rect.x      = 0;
-    //   rect.y      = next_line_y;
-    //   rect.width  = size.x;
-    //   rect.height = size.y;
+    Vec2f min_size    = size;
+    Vec2f actual_size = size;
+    Vec2f pos         = content_rect.xy() + scrolled_cursor;
 
-    //   if (stretch && rect.x + rect.width < content_rect.width) {
-    //     rect.width += content_rect.width - (rect.x + rect.width);
-    //   }
-    // } else
-    {
-      rect.x      = content_rect.x + scrolled_cursor.x;
-      rect.y      = content_rect.y + scrolled_cursor.y;
-      rect.width  = size.x;
-      rect.height = size.y;
-
-      if (fill && rect.x + rect.width < content_rect.x + content_rect.width) {
-        size.x = content_rect.x + content_rect.width - rect.x;
-        rect.width = size.x;
-      }
+    if (fill && pos.x + min_size.x < content_rect.x + content_rect.width) {
+      actual_size.x = content_rect.x + content_rect.width - pos.x;
     }
 
     if (commit) {
-      cursor_size = fmaxf(cursor_size, size.y);
-      cursor.x += size.x;
-
+      f32 min_cursor_size = fmaxf(cursor_size, min_size.y);
       current_frame_minimum_content_span.x =
-          fmaxf(current_frame_minimum_content_span.x, cursor.x);
-      current_frame_minimum_content_span.y =
-          fmaxf(current_frame_minimum_content_span.y, cursor.y + cursor_size);
+          fmaxf(current_frame_minimum_content_span.x, cursor.x + min_size.x);
+      current_frame_minimum_content_span.y = fmaxf(
+          current_frame_minimum_content_span.y, cursor.y + min_cursor_size);
+
+      cursor_size = fmaxf(cursor_size, actual_size.y);
+      cursor.x += actual_size.x;
     }
 
     if (fill) next_line(line_gap);
 
-    return rect;
+    return {
+        content_rect.x + scrolled_cursor.x,
+        content_rect.y + scrolled_cursor.y,
+        actual_size.x,
+        actual_size.y,
+    };
   }
 
   Rect get_remaining_rect()

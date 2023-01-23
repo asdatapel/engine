@@ -58,14 +58,30 @@ b8 do_hot(DuiId id, Rect rect, Group *root_group)
   return is_hot;
 }
 
-// for widgets inside containers
-b8 do_hot(DuiId id, Rect rect, Container *c)
+// for widgets inside windows
+b8 do_hot(DuiId id, Rect control_rect, Rect container_rect)
 {
-  b8 is_top_container     = c->id == s.top_container_at_mouse_pos;
-  b8 is_in_container_rect = in_rect(s.input->mouse_pos, c->rect);
+  b8 is_top_container     = !s.cw || s.cw->id == s.top_container_at_mouse_pos;
+  b8 is_in_container_rect = in_rect(s.input->mouse_pos, container_rect);
 
   b8 is_hot = is_top_container && is_in_container_rect &&
-              in_rect(s.input->mouse_pos, rect);
+              in_rect(s.input->mouse_pos, control_rect);
+  if (is_hot)
+    s.set_hot(id);
+  else
+    s.clear_hot(id);
+
+  return is_hot;
+}
+
+// for widgets inside popups
+b8 do_hot(DuiId id, Rect control_rect, Container *popup)
+{
+  b8 is_top_container     = popup->id == s.top_container_at_mouse_pos;
+  b8 is_in_container_rect = in_rect(s.input->mouse_pos, popup->rect);
+
+  b8 is_hot = is_top_container && is_in_container_rect &&
+              in_rect(s.input->mouse_pos, control_rect);
   if (is_hot)
     s.set_hot(id);
   else
@@ -846,7 +862,7 @@ b8 start_popup(DuiId id)
   Popup *current_popup = get_next_popup();
   if (!current_popup || id != current_popup->container.id) return false;
 
-  current_popup->container.start_frame(&s, false);
+  current_popup->container.start_frame(&s, true);
 
   push_base_scissor(&s.dl);
   current_popup->outline_rect    = push_rounded_rect(&s.dl, 0, {}, 2, d_light);
@@ -861,7 +877,7 @@ b8 start_popup(String name) { return start_popup(hash(name)); }
 void end_popup()
 {
   s.cc->expand_rect_to_content();
-  s.cc->end_frame(&s, false);
+  s.cc->end_frame(&s, true);
 
   pop_scissor(&s.dl);
 
@@ -1724,7 +1740,7 @@ b8 button(String text, Vec2f size, Color color, b8 fill = false)
 
   Rect rect = c->place(size, true, fill);
 
-  b8 hot     = do_hot(id, rect, c);
+  b8 hot     = do_hot(id, rect, c->rect);
   b8 active  = do_active(id);
   b8 clicked = hot && s.just_stopped_being_active == id;
 
@@ -1777,7 +1793,7 @@ void text_input(StaticString<N> *str)
   Rect border_rect = c->place({0, height}, true, true);
   Rect rect        = inset(border_rect, 1);
 
-  b8 hot      = do_hot(id, rect, c);
+  b8 hot      = do_hot(id, rect, c->rect);
   b8 active   = do_active(id);
   b8 dragging = do_dragging(id);
   b8 selected = do_selected(id, true);
@@ -2006,12 +2022,156 @@ void text_input(StaticString<N> *str)
   }
 }
 
+void start_list() {}
+
+void end_list() {}
+
+b8 directory_item(DuiId id, String text, b8 expandable, b8 selected = false)
+{
+  static StaticPool<b8, 2048> open_list_items(false);
+
+  Container *c = get_current_container(&s);
+  if (!c) return false;
+
+  id = extend_hash((DuiId)c, id);
+
+  f32 height = CONTENT_FONT_HEIGHT + 4 + 4;
+  Rect rect  = c->place({0, height}, true, true);
+
+  b8 hot      = do_hot(id, rect, c->rect);
+  b8 active   = do_active(id);
+  b8 dragging = do_dragging(id);
+  selected    = do_selected(id, true) || selected;
+  b8 clicked  = hot && s.just_started_being_active == id;
+
+  b8 open = false;
+  if (expandable) {
+    open = open_list_items.wrapped_get(id);
+    if (clicked) {
+      open = !open;
+      open_list_items.emplace_wrapped(id, open);
+    }
+  }
+
+  Vec2f cursor = {rect.x + WINDOW_MARGIN_SIZE, rect.y + WINDOW_MARGIN_SIZE};
+
+  if (hot && !selected) push_rect(&s.dl, c->z, rect, {.6, .6, .6, .5});
+  if (selected) push_rect(&s.dl, c->z, rect, {.4, .4, .4, .5});
+
+  if (expandable) {
+    String arrow_icon = open ? "D" : "G";
+    f32 arrow_x       = cursor.x;
+    f32 arrow_width =
+        fmaxf(s.dl.icon_font.get_text_width("D", CONTENT_FONT_HEIGHT),
+              s.dl.icon_font.get_text_width("G", CONTENT_FONT_HEIGHT));
+    cursor.x += arrow_width + WINDOW_MARGIN_SIZE;
+
+    push_vector_text(&s.dl, &s.dl.icon_font, c->z, arrow_icon,
+                     {arrow_x, cursor.y}, {1, 1, 1, 1}, CONTENT_FONT_HEIGHT);
+  }
+
+  String folder_icon = selected && expandable ? "A" : "B";
+  f32 folder_x       = cursor.x;
+  f32 folder_width =
+      fmaxf(s.dl.icon_font.get_text_width("A", CONTENT_FONT_HEIGHT),
+            s.dl.icon_font.get_text_width("B", CONTENT_FONT_HEIGHT));
+  cursor.x += folder_width + WINDOW_MARGIN_SIZE;
+
+  push_vector_text(&s.dl, &s.dl.icon_font, c->z, folder_icon,
+                   {folder_x, cursor.y}, {1, 1, 1, 1}, CONTENT_FONT_HEIGHT);
+
+  push_vector_text(&s.dl, &s.dl.vfont, c->z, text, {cursor.x, cursor.y},
+                   {1, 1, 1, 1}, CONTENT_FONT_HEIGHT);
+
+  return open;
+}
+
 API void api_init_dui(Device *device, Pipeline pipeline)
 {
   init_draw_system(&s.dl, device, pipeline);
 
   s.empty_group      = create_group(nullptr, {})->id;
   s.fullscreen_group = s.empty_group;
+}
+
+void asset_browser()
+{
+  start_window("Asset Browser", {100, 100, 900, 500});
+
+  start_list();
+
+  {
+    DuiId sub_container_id = extend_hash(s.cc->id, "subcontainer");
+
+    Container *sub_container =
+        s.containers.wrapped_exists(sub_container_id)
+            ? &s.containers.wrapped_get(sub_container_id)
+            : s.containers.emplace_wrapped(sub_container_id, {});
+
+    sub_container->id   = sub_container_id;
+    sub_container->z    = s.cc->z;
+    sub_container->rect = s.cc->rect;
+    sub_container->rect.width *= .25;
+
+    sub_container->start_frame(&s, false);
+    push_scissor(&s.dl, sub_container->rect);
+
+    Array<String, 32> directories = {
+        "Documents",   "Downloads", "Pictures",       "Garbage",
+        "Other Stuff", "textures",  "project_config", ".vscode",
+        "helpers",     "util",      "even more crap", "is this overflowing"};
+    for (i32 i = 0; i < directories.size; i++) {
+      DuiId id = hash(directories[i]);
+      if (directory_item(id, directories[i], i % 2, false)) {
+        button("inside tree view", {100, 40}, {1, 0, 1, 1});
+        next_line();
+      }
+    }
+
+    sub_container->end_frame(&s, false);
+    pop_scissor(&s.dl);
+
+    s.cc = s.cw;
+  }
+
+  {
+    DuiId sub_container_id = extend_hash(s.cc->id, "subcontainer3");
+
+    Container *sub_container =
+        s.containers.wrapped_exists(sub_container_id)
+            ? &s.containers.wrapped_get(sub_container_id)
+            : s.containers.emplace_wrapped(sub_container_id, {});
+
+    sub_container->id   = sub_container_id;
+    sub_container->z    = s.cc->z;
+    sub_container->rect = s.cc->rect;
+    sub_container->rect.x += sub_container->rect.width * .25;
+    sub_container->rect.width *= .75;
+
+    sub_container->start_frame(&s, false);
+    push_scissor(&s.dl, sub_container->rect);
+
+    Array<String, 32> directories = {
+        "Documents",   "Downloads", "Pictures",       "Garbage",
+        "Other Stuff", "textures",  "project_config", ".vscode",
+        "helpers",     "util",      "even more crap", "is this overflowing"};
+    for (i32 i = 0; i < directories.size; i++) {
+      DuiId id = hash(directories[i]);
+      if (directory_item(id, directories[i], true, false)) {
+        button("inside tree view", {100, 40}, {1, 0, 1, 1});
+        next_line();
+      }
+    }
+
+    sub_container->end_frame(&s, false);
+    pop_scissor(&s.dl);
+
+    s.cc = s.cw;
+  }
+
+  end_list();
+
+  end_window();
 }
 
 // test menubar stuff
@@ -2149,8 +2309,7 @@ API void api_debug_ui_test(Device *device, Pipeline pipeline, Input *input,
       b8 clicked = hot && s.just_stopped_being_active == menubar_item_id;
 
       if (clicked) {
-        open_popup(menuitems[i], {menubar_item_rect.x, MENUBAR_HEIGHT},
-                   200);
+        open_popup(menuitems[i], {menubar_item_rect.x, MENUBAR_HEIGHT}, 200);
       }
 
       if (start_popup(menuitems[i])) {
@@ -2170,6 +2329,8 @@ API void api_debug_ui_test(Device *device, Pipeline pipeline, Input *input,
           MENUBAR_MARGIN * 2;
     }
   }
+
+  asset_browser();
 
   end_frame(window, device, pipeline);
 }

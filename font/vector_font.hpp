@@ -12,169 +12,174 @@
 FT_Library library;
 
 struct QuadCurve2 {
-  Vec2f p0, p1, p2;
+    Vec2f p0, p1, p2;
 };
 
 struct Glyph {
-  u32 curve_start_idx;
-  u32 curve_count;
-
-  Vec2f size;
-  f32 advance;
-  Vec2f bearing;
+    u32 curve_start_idx;
+    u32 curve_count;
+    
+    Vec2f size;
+    f32 advance;
+    Vec2f bearing;
 };
 
 struct VectorFont {
-  Array<QuadCurve2, 4096> curves;
-  Array<Glyph, 256> glyphs;
-
-  f32 ascent;
-
-  f32 get_text_width(String text, f32 scale = 1.f)
-  {
-    f32 width = 0;
-    for (i32 i = 0; i < text.size; i++) {
-      Glyph g = glyphs[text[i]];
-      width += g.advance;
+    Array<QuadCurve2, 4096> curves;
+    Array<Glyph, 256> glyphs;
+    
+    f32 ascent;
+    
+    i32 char_buffer_offset = 0;
+    
+    f32 get_text_width(String text, f32 scale = 1.f)
+    {
+        f32 width = 0;
+        for (i32 i = 0; i < text.size; i++) {
+            Glyph g = glyphs[text[i]];
+            width += g.advance;
+        }
+        
+        return width * scale;
     }
-
-    return width * scale;
-  }
-
-  i32 char_index_at_pos(String text, Vec2f text_pos, Vec2f pos, f32 scale = 1.f)
-  {
-    f32 cursor_x = text_pos.x;
-    for (i32 i = 0; i < text.size; i++) {
-      Glyph g = glyphs[text[i]];
-
-      if (cursor_x + (g.advance * scale / 2.f) > pos.x) return i;
-
-      cursor_x += g.advance * scale;
+    
+    i32 char_index_at_pos(String text, Vec2f text_pos, Vec2f pos, f32 scale = 1.f)
+    {
+        f32 cursor_x = text_pos.x;
+        for (i32 i = 0; i < text.size; i++) {
+            Glyph g = glyphs[text[i]];
+            
+            if (cursor_x + (g.advance * scale / 2.f) > pos.x) return i;
+            
+            cursor_x += g.advance * scale;
+        }
+        
+        return text.size;
     }
-
-    return text.size;
-  }
 };
 
 Glyph extract_glyph(VectorFont* font, FT_Face face, u32 character)
 {
-  FT_Error err = FT_Set_Pixel_Sizes(face, 0, 32);
-  if (err) {
-    fatal("failed to set pixel size?");
-  }
-
-  u32 glyph_index = FT_Get_Char_Index(face, character);
-
-  err = FT_Load_Glyph(face, glyph_index, FT_LOAD_DEFAULT);
-  if (err) {
-    fatal("failed to load glyph");
-  }
-
-  FT_Outline outline = face->glyph->outline;
-
-  Glyph glyph;
-  glyph.size    = Vec2f((f32)face->glyph->metrics.width / face->size->metrics.height,
-                        (f32)face->glyph->metrics.height / face->size->metrics.height);
-  glyph.bearing = Vec2f((f32)face->glyph->metrics.horiBearingX / face->size->metrics.height,
-                        (f32)face->glyph->metrics.horiBearingY / face->size->metrics.height);
-  glyph.advance = (f32)face->glyph->advance.x / face->size->metrics.height;
-
-  glyph.curve_start_idx = font->curves.size;
-  glyph.curve_count     = 0;
-
-  for (i32 contour_i = 0; contour_i < outline.n_contours; contour_i++) {
-    i32 contour_start =
-        contour_i == 0 ? 0 : outline.contours[contour_i - 1] + 1;
-    i32 contour_end = outline.contours[contour_i];
-
-    b8 on_ghost_point = false;
-    Vec2f ghost_point;
-
-    i32 point_i = contour_start;
-    while (point_i <= contour_end) {
-      auto get_pos = [&](FT_Vector ft_vec) {
-        f32 x = ((f32)ft_vec.x - face->glyph->metrics.horiBearingX) /
-                face->glyph->metrics.width * .98 + .01;
-        f32 y = ((f32)ft_vec.y + (face->glyph->metrics.height -
-                                  face->glyph->metrics.horiBearingY)) /
-                face->glyph->metrics.height * .98 + .01;
-
-        return Vec2f(x, y);
-      };
-
-      Vec2f a = get_pos(outline.points[point_i]);
-      Vec2f b;
-      char b_tag;
-      if (point_i + 1 > contour_end) {
-        b     = get_pos(outline.points[contour_start]);
-        b_tag = outline.tags[contour_start];
-      } else {
-        b     = get_pos(outline.points[point_i + 1]);
-        b_tag = outline.tags[point_i + 1];
-      }
-
-      if (FT_CURVE_TAG(b_tag) == FT_CURVE_TAG_ON) {
-        font->curves.push_back({a, (a + b) / Vec2f(2.f, 2.f), b});
-        glyph.curve_count++;
-        point_i++;
-      } else if (FT_CURVE_TAG(b_tag) == FT_CURVE_TAG_CONIC) {
-        if (on_ghost_point) {
-          a              = ghost_point;
-          on_ghost_point = false;
-        }
-
-        Vec2f c;
-        char c_tag;
-        if (point_i + 2 > contour_end) {
-          c     = get_pos(outline.points[contour_start]);
-          c_tag = outline.tags[contour_start];
-        } else {
-          c     = get_pos(outline.points[point_i + 2]);
-          c_tag = outline.tags[point_i + 2];
-        }
-
-        if (FT_CURVE_TAG(c_tag) == FT_CURVE_TAG_CONIC) {
-          on_ghost_point = true;
-          ghost_point    = (b + c) / Vec2f(2.f, 2.f);
-          c              = ghost_point;
-        } else if (FT_CURVE_TAG(c_tag) == FT_CURVE_TAG_ON) {
-          point_i++;
-        } else {
-          fatal("dumb");
-        }
-
-        font->curves.push_back({a, b, c});
-        glyph.curve_count++;
-
-        point_i++;
-      }
+    FT_Error err = FT_Set_Pixel_Sizes(face, 0, 32);
+    if (err) {
+        fatal("failed to set pixel size?");
     }
-  }
-
-  return glyph;
+    
+    u32 glyph_index = FT_Get_Char_Index(face, character);
+    
+    err = FT_Load_Glyph(face, glyph_index, FT_LOAD_DEFAULT);
+    if (err) {
+        fatal("failed to load glyph");
+    }
+    
+    FT_Outline outline = face->glyph->outline;
+    
+    Glyph glyph;
+    glyph.size    = Vec2f((f32)face->glyph->metrics.width / face->size->metrics.height,
+                          (f32)face->glyph->metrics.height / face->size->metrics.height);
+    glyph.bearing = Vec2f((f32)face->glyph->metrics.horiBearingX / face->size->metrics.height,
+                          (f32)face->glyph->metrics.horiBearingY / face->size->metrics.height);
+    glyph.advance = (f32)face->glyph->advance.x / face->size->metrics.height;
+    
+    glyph.curve_start_idx = font->curves.size;
+    glyph.curve_count     = 0;
+    
+    for (i32 contour_i = 0; contour_i < outline.n_contours; contour_i++) {
+        i32 contour_start =
+            contour_i == 0 ? 0 : outline.contours[contour_i - 1] + 1;
+        i32 contour_end = outline.contours[contour_i];
+        
+        b8 on_ghost_point = false;
+        Vec2f ghost_point;
+        
+        i32 point_i = contour_start;
+        while (point_i <= contour_end) {
+            auto get_pos = [&](FT_Vector ft_vec) {
+                f32 x = ((f32)ft_vec.x - face->glyph->metrics.horiBearingX) /
+                    face->glyph->metrics.width * .98 + .01;
+                f32 y = ((f32)ft_vec.y + (face->glyph->metrics.height -
+                                          face->glyph->metrics.horiBearingY)) /
+                    face->glyph->metrics.height * .98 + .01;
+                
+                return Vec2f(x, y);
+            };
+            
+            Vec2f a = get_pos(outline.points[point_i]);
+            Vec2f b;
+            char b_tag;
+            if (point_i + 1 > contour_end) {
+                b     = get_pos(outline.points[contour_start]);
+                b_tag = outline.tags[contour_start];
+            } else {
+                b     = get_pos(outline.points[point_i + 1]);
+                b_tag = outline.tags[point_i + 1];
+            }
+            
+            if (FT_CURVE_TAG(b_tag) == FT_CURVE_TAG_ON) {
+                font->curves.push_back({a, (a + b) / Vec2f(2.f, 2.f), b});
+                glyph.curve_count++;
+                point_i++;
+            } else if (FT_CURVE_TAG(b_tag) == FT_CURVE_TAG_CONIC) {
+                if (on_ghost_point) {
+                    a              = ghost_point;
+                    on_ghost_point = false;
+                }
+                
+                Vec2f c;
+                char c_tag;
+                if (point_i + 2 > contour_end) {
+                    c     = get_pos(outline.points[contour_start]);
+                    c_tag = outline.tags[contour_start];
+                } else {
+                    c     = get_pos(outline.points[point_i + 2]);
+                    c_tag = outline.tags[point_i + 2];
+                }
+                
+                if (FT_CURVE_TAG(c_tag) == FT_CURVE_TAG_CONIC) {
+                    on_ghost_point = true;
+                    ghost_point    = (b + c) / Vec2f(2.f, 2.f);
+                    c              = ghost_point;
+                } else if (FT_CURVE_TAG(c_tag) == FT_CURVE_TAG_ON) {
+                    point_i++;
+                } else {
+                    fatal("dumb");
+                }
+                
+                font->curves.push_back({a, b, c});
+                glyph.curve_count++;
+                
+                point_i++;
+            }
+        }
+    }
+    
+    return glyph;
 }
 
-VectorFont create_font()
+VectorFont create_font(String filename)
 {
-  FT_Error err = FT_Init_FreeType(&library);
-  if (err) {
-    fatal("failed to init freetype");
-  }
-
-  FT_Face face;
-  err = FT_New_Face(library, "resources/fonts/OpenSans-Regular.ttf", 0,
-                    &face);
-  if (err) {
-    fatal("failed to load font");
-  }
-
-  VectorFont font;
-  font.ascent = (f32)face->ascender / face->height;
-  for (i32 i = 0; i < 128; i++) {
-    font.glyphs.push_back(extract_glyph(&font, face, i));
-  }
-
-  return font;
+    FT_Error err = FT_Init_FreeType(&library);
+    if (err) {
+        fatal("failed to init freetype");
+    }
+    
+    Temp temp;
+    File file = read_file(filename, &temp);
+    
+    FT_Face face;
+    err = FT_New_Memory_Face(library, file.data.data, file.data.size, 0, &face);
+    
+    if (err) {
+        fatal("failed to load font");
+    }
+    
+    VectorFont font;
+    font.ascent = (f32)face->ascender / face->height;
+    for (i32 i = 0; i < 128; i++) {
+        font.glyphs.push_back(extract_glyph(&font, face, i));
+    }
+    
+    return font;
 }
 
 // struct ConicCurve {

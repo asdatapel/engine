@@ -3,7 +3,7 @@
 namespace Dui
 {
 
-void Container::start_frame(DuiState *s, b8 is_window)
+void Container::start_frame(DuiState *s, b8 is_popup)
 {
   if (last_frame_started == s->frame) {
     return;
@@ -21,14 +21,14 @@ void Container::start_frame(DuiState *s, b8 is_window)
 
   s->cc = this;
 
-  if (is_window) {
-    push_scissor(&s->dl, rect);
+  if (!is_popup) {
     push_rect(&s->dl, z, rect, d_dark);
   }
 
-  if (is_window) {
-    b8 has_scrollwheel_focus = (s->top_container_at_mouse_pos == id) ||
-                               in_rect(s->input->mouse_pos, content_rect);
+  {
+    b8 has_scrollwheel_focus =
+        (!s->cw || s->top_container_at_mouse_pos == s->cw->id) &&
+        in_rect(s->input->mouse_pos, content_rect);
 
     // FYI doing this here can cause the position of the scrollbar to lag behind
     // a moving container. Its ok though because it will still be drawn in the
@@ -54,7 +54,7 @@ void Container::start_frame(DuiState *s, b8 is_window)
                content_rect.y + scrollbar_y, SCROLLBAR_SIZE, scrollbar_height};
 
       DuiId vertical_scrollbar_id = extend_hash(id, "vertical_scrollbar");
-      b8 hot      = do_hot(vertical_scrollbar_id, scrollbar_area_rect, this);
+      b8 hot      = do_hot(vertical_scrollbar_id, scrollbar_area_rect, rect);
       b8 active   = do_active(vertical_scrollbar_id);
       b8 dragging = do_dragging(vertical_scrollbar_id);
       if (hot) {
@@ -112,7 +112,7 @@ void Container::start_frame(DuiState *s, b8 is_window)
                scrollbar_width, SCROLLBAR_SIZE};
 
       DuiId horizontal_scrollbar_id = extend_hash(id, "horizontal_scrollbar");
-      b8 hot      = do_hot(horizontal_scrollbar_id, scrollbar_area_rect, this);
+      b8 hot      = do_hot(horizontal_scrollbar_id, scrollbar_area_rect, rect);
       b8 active   = do_active(horizontal_scrollbar_id);
       b8 dragging = do_dragging(horizontal_scrollbar_id);
       if (hot) {
@@ -156,11 +156,15 @@ void Container::start_frame(DuiState *s, b8 is_window)
         -last_frame_minimum_content_span + content_rect.span(), {0.f, 0.f});
     scroll_offset = (scroll_offset + scroll_offset_target) / 2.f;
   }
+
+  if (!is_popup) {
+    push_scissor(&s->dl, content_rect);
+  }
 }
 
-void Container::end_frame(DuiState *s, b8 is_window)
+void Container::end_frame(DuiState *s, b8 is_popup)
 {
-  if (is_window) {
+  if (!is_popup) {
     pop_scissor(&s->dl);
   }
 
@@ -169,8 +173,10 @@ void Container::end_frame(DuiState *s, b8 is_window)
 
 void Container::expand_rect_to_content()
 {
-  rect.width = current_frame_minimum_content_span.x + (WINDOW_MARGIN_SIZE * 2);
-  rect.height = current_frame_minimum_content_span.y + (WINDOW_MARGIN_SIZE * 2);
+  rect.width  = fmaxf(rect.width, current_frame_minimum_content_span.x +
+                                      (WINDOW_MARGIN_SIZE * 2));
+  rect.height = fmaxf(rect.height, current_frame_minimum_content_span.y +
+                                       (WINDOW_MARGIN_SIZE * 2));
 }
 
 Container *get_container(DuiId id) { return &s.containers.wrapped_get(id); }
