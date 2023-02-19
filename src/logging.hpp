@@ -1,7 +1,7 @@
 #pragma once
 
-#include <iostream>
 #include <stdio.h>
+#include <iostream>
 
 #include "string.hpp"
 
@@ -16,6 +16,13 @@ void fatal(Args... args)
 {
   (std::cout << ... << args) << std::endl;
   abort();
+}
+
+template <class... Args>
+void error(Args... args)
+{
+  std::cout << "Error: ";
+  (std::cout << ... << args) << "\n" << std::endl;
 }
 
 template <class... Args>

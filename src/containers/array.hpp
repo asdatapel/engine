@@ -6,7 +6,7 @@
 
 #include "types.hpp"
 
-template <typename T, size_t N>
+template <typename T, u32 N>
 struct Array {
   const static u32 MAX_SIZE = N;
   T data[N];
@@ -47,7 +47,7 @@ struct Array {
     return size++;
   }
 
-  int insert(i64 i, T val)
+  i32 insert(u32 i, T val)
   {
     if (size >= MAX_SIZE) {
       fatal("static array past capacity\n");

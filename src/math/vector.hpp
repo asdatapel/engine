@@ -132,6 +132,11 @@ inline Vec3<T> operator-(const Vec3<T> &lhs, const Vec3<T> &rhs)
   return {lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z};
 }
 template <typename T>
+inline Vec3<T> operator-(const Vec3<T> &v)
+{
+  return {-v.x, -v.y, -v.z};
+}
+template <typename T>
 inline Vec3<T> operator*(const Vec3<T> &lhs, const Vec3<T> &rhs)
 {
   return {lhs.x * rhs.x, lhs.y * rhs.y, lhs.z * rhs.z};
@@ -206,6 +211,7 @@ struct Vec4 {
 };
 
 typedef Vec2<i32> Vec2i;
+typedef Vec2<u32> Vec2u;
 typedef Vec2<f32> Vec2f;
 typedef Vec2<b8> Vec2b;
 typedef Vec3<f32> Vec3f;

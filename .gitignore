@@ -1,3 +1,6 @@
 .vscode/
 build/
-external/
+third_party/assimp/
+third_party/freetype/
+third_party/glfw*
+third_party/stb

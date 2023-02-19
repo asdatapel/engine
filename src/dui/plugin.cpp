@@ -1,3 +1,3 @@
-#include "dui/dui.hpp"
+#include "dui/dui.cpp"
 
 int main() {}

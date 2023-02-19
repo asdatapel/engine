@@ -9,59 +9,74 @@
 #include "math/math.hpp"
 #include "platform.hpp"
 
-struct VertexDescriptions {
+namespace Gpu
+{
+
+enum struct Format {
+  RG32F,
+  RGB32F,
+  RGBA32F,
+};
+VkFormat to_vk_format(Format f)
+{
+  switch (f) {
+    case Format::RG32F:
+      return VK_FORMAT_R32G32_SFLOAT;
+    case Format::RGB32F:
+      return VK_FORMAT_R32G32B32_SFLOAT;
+    case Format::RGBA32F:
+      return VK_FORMAT_R32G32B32A32_SFLOAT;
+  }
+}
+i32 format_size(Format f)
+{
+  switch (f) {
+    case Format::RG32F:
+      return 8;
+    case Format::RGB32F:
+      return 12;
+    case Format::RGBA32F:
+      return 16;
+  }
+}
+
+struct VertexDescription {
+  Array<Format, 10> attributes;
+};
+
+struct ShadersDefinition {
+  String vert_shader;
+  String frag_shader;
+};
+
+struct VkVertexDescription {
   VkVertexInputBindingDescription binding_description;
   Array<VkVertexInputAttributeDescription, 10> vertex_attribute_descriptions;
 };
-VertexDescriptions get_vertex_descriptions()
+VkVertexDescription get_vk_vertex_description(
+    VertexDescription vertex_description)
 {
-  VertexDescriptions vertex_descriptions;
+  VkVertexDescription vk_vertex_description;
 
-  vertex_descriptions.binding_description.binding = 0;
-  vertex_descriptions.binding_description.stride  = 13 * sizeof(f32);
-  vertex_descriptions.binding_description.inputRate =
+  vk_vertex_description.vertex_attribute_descriptions.resize(
+      vertex_description.attributes.size);
+  i32 offset = 0;
+  for (i32 i = 0; i < vertex_description.attributes.size; i++) {
+    vk_vertex_description.vertex_attribute_descriptions[i].binding  = 0;
+    vk_vertex_description.vertex_attribute_descriptions[i].location = i;
+    vk_vertex_description.vertex_attribute_descriptions[i].format =
+        to_vk_format(vertex_description.attributes[i]);
+    vk_vertex_description.vertex_attribute_descriptions[i].offset = offset;
+
+    offset += format_size(vertex_description.attributes[i]);
+  }
+
+  vk_vertex_description.binding_description.binding = 0;
+  vk_vertex_description.binding_description.inputRate =
       VK_VERTEX_INPUT_RATE_VERTEX;
+  vk_vertex_description.binding_description.stride = offset;
 
-  vertex_descriptions.vertex_attribute_descriptions.resize(6);
-
-  vertex_descriptions.vertex_attribute_descriptions[0].binding  = 0;
-  vertex_descriptions.vertex_attribute_descriptions[0].location = 0;
-  vertex_descriptions.vertex_attribute_descriptions[0].format =
-      VK_FORMAT_R32G32_SFLOAT;
-  vertex_descriptions.vertex_attribute_descriptions[0].offset = 0 * sizeof(f32);
-
-  vertex_descriptions.vertex_attribute_descriptions[1].binding  = 0;
-  vertex_descriptions.vertex_attribute_descriptions[1].location = 1;
-  vertex_descriptions.vertex_attribute_descriptions[1].format =
-      VK_FORMAT_R32G32_SFLOAT;
-  vertex_descriptions.vertex_attribute_descriptions[1].offset = 2 * sizeof(f32);
-
-  vertex_descriptions.vertex_attribute_descriptions[2].binding  = 0;
-  vertex_descriptions.vertex_attribute_descriptions[2].location = 2;
-  vertex_descriptions.vertex_attribute_descriptions[2].format =
-      VK_FORMAT_R32G32B32A32_SFLOAT;
-  vertex_descriptions.vertex_attribute_descriptions[2].offset = 4 * sizeof(f32);
-
-  vertex_descriptions.vertex_attribute_descriptions[3].binding  = 0;
-  vertex_descriptions.vertex_attribute_descriptions[3].location = 3;
-  vertex_descriptions.vertex_attribute_descriptions[3].format =
-      VK_FORMAT_R32_SFLOAT;
-  vertex_descriptions.vertex_attribute_descriptions[3].offset = 8 * sizeof(f32);
-
-  vertex_descriptions.vertex_attribute_descriptions[4].binding  = 0;
-  vertex_descriptions.vertex_attribute_descriptions[4].location = 4;
-  vertex_descriptions.vertex_attribute_descriptions[4].format =
-      VK_FORMAT_R32G32_SFLOAT;
-  vertex_descriptions.vertex_attribute_descriptions[4].offset = 9 * sizeof(f32);
-
-  vertex_descriptions.vertex_attribute_descriptions[5].binding  = 0;
-  vertex_descriptions.vertex_attribute_descriptions[5].location = 5;
-  vertex_descriptions.vertex_attribute_descriptions[5].format =
-      VK_FORMAT_R32G32_SFLOAT;
-  vertex_descriptions.vertex_attribute_descriptions[5].offset =
-      11 * sizeof(f32);
-
-  return vertex_descriptions;
+  return vk_vertex_description;
 }
 
 VkShaderModule create_shader_module(VkDevice device, File file)
@@ -86,7 +101,59 @@ struct Pipeline {
   Array<VkDescriptorSetLayout, 4> descriptor_set_layouts;
 };
 
-Pipeline create_pipeline(Device *device, VkRenderPass render_pass)
+Array<VkDescriptorSetLayout, 4> create_dui_descriptor_set_layouts(Device *device)
+{
+  Array<VkDescriptorSetLayout, 4> layouts;
+
+  Array<VkDescriptorBindingFlags, 1> binding_flags = {
+      VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT};
+  VkDescriptorSetLayoutBindingFlagsCreateInfoEXT extended_info{};
+  extended_info.sType =
+      VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT;
+  extended_info.pNext         = nullptr;
+  extended_info.bindingCount  = binding_flags.size;
+  extended_info.pBindingFlags = binding_flags.data;
+
+  VkDescriptorSetLayoutBinding sampler_layout_binding{};
+  sampler_layout_binding.binding         = 0;
+  sampler_layout_binding.descriptorCount = 1000;
+  sampler_layout_binding.descriptorType =
+      VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  sampler_layout_binding.pImmutableSamplers = nullptr;
+  sampler_layout_binding.stageFlags         = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+  VkDescriptorSetLayoutBinding buffer_layout_binding{};
+  buffer_layout_binding.binding            = 1;
+  buffer_layout_binding.descriptorCount    = 1;
+  buffer_layout_binding.descriptorType     = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+  buffer_layout_binding.pImmutableSamplers = nullptr;
+  buffer_layout_binding.stageFlags =
+      VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+
+  VkDescriptorSetLayoutBinding bindings[] = {sampler_layout_binding,
+                                             buffer_layout_binding};
+  VkDescriptorSetLayoutCreateInfo layout_info{};
+  layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+  layout_info.flags =
+      VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT;
+  layout_info.bindingCount = 2;
+  layout_info.pBindings    = bindings;
+  layout_info.pNext        = &extended_info;
+
+  VkDescriptorSetLayout descriptor_set_layout;
+  if (vkCreateDescriptorSetLayout(device->device, &layout_info, nullptr,
+                                  &descriptor_set_layout) != VK_SUCCESS) {
+    fatal("failed to create descriptor set layout!");
+  }
+
+  layouts.push_back(descriptor_set_layout);
+
+  return layouts;
+}
+
+Pipeline create_pipeline(Device *device, ShadersDefinition shaders_definition,
+                         Gpu::VertexDescription vertex_description,
+                         VkRenderPass render_pass, u32 push_constant_size)
 {
   Pipeline pipeline;
 
@@ -98,7 +165,8 @@ Pipeline create_pipeline(Device *device, VkRenderPass render_pass)
   dynamic_state.dynamicStateCount = 2;
   dynamic_state.pDynamicStates    = dynamic_states;
 
-  VertexDescriptions vertex_descriptions = get_vertex_descriptions();
+  VkVertexDescription vertex_descriptions =
+      get_vk_vertex_description(vertex_description);
 
   VkPipelineVertexInputStateCreateInfo vertex_input_info{};
   vertex_input_info.sType =
@@ -181,63 +249,20 @@ Pipeline create_pipeline(Device *device, VkRenderPass render_pass)
   color_blending.sType =
       VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
   color_blending.logicOpEnable     = VK_FALSE;
-  color_blending.logicOp           = VK_LOGIC_OP_COPY;  // Optional
+  color_blending.logicOp           = VK_LOGIC_OP_COPY;
   color_blending.attachmentCount   = 1;
   color_blending.pAttachments      = &color_blend_attachment;
-  color_blending.blendConstants[0] = 0.0f;  // Optional
-  color_blending.blendConstants[1] = 0.0f;  // Optional
-  color_blending.blendConstants[2] = 0.0f;  // Optional
-  color_blending.blendConstants[3] = 0.0f;  // Optional
+  color_blending.blendConstants[0] = 0.0f;
+  color_blending.blendConstants[1] = 0.0f;
+  color_blending.blendConstants[2] = 0.0f;
+  color_blending.blendConstants[3] = 0.0f;
+
+  pipeline.descriptor_set_layouts = create_dui_descriptor_set_layouts(device);
 
   VkPushConstantRange push_constant;
   push_constant.offset     = 0;
-  push_constant.size       = sizeof(Vec2f);
+  push_constant.size       = push_constant_size;
   push_constant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-  {
-    Array<VkDescriptorBindingFlags, 1> binding_flags = {
-        VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT};
-    VkDescriptorSetLayoutBindingFlagsCreateInfoEXT extended_info{};
-    extended_info.sType =
-        VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT;
-    extended_info.pNext         = nullptr;
-    extended_info.bindingCount  = binding_flags.size;
-    extended_info.pBindingFlags = binding_flags.data;
-
-    VkDescriptorSetLayoutBinding sampler_layout_binding{};
-    sampler_layout_binding.binding         = 0;
-    sampler_layout_binding.descriptorCount = 1000;
-    sampler_layout_binding.descriptorType =
-        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    sampler_layout_binding.pImmutableSamplers = nullptr;
-    sampler_layout_binding.stageFlags         = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    VkDescriptorSetLayoutBinding buffer_layout_binding{};
-    buffer_layout_binding.binding         = 1;
-    buffer_layout_binding.descriptorCount = 1;
-    buffer_layout_binding.descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    buffer_layout_binding.pImmutableSamplers = nullptr;
-    buffer_layout_binding.stageFlags =
-        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    VkDescriptorSetLayoutBinding bindings[] = {sampler_layout_binding,
-                                               buffer_layout_binding};
-    VkDescriptorSetLayoutCreateInfo layout_info{};
-    layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layout_info.flags =
-        VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT;
-    layout_info.bindingCount = 2;
-    layout_info.pBindings    = bindings;
-    layout_info.pNext        = &extended_info;
-
-    VkDescriptorSetLayout descriptor_set_layout;
-    if (vkCreateDescriptorSetLayout(device->device, &layout_info, nullptr,
-                                    &descriptor_set_layout) != VK_SUCCESS) {
-      fatal("failed to create descriptor set layout!");
-    }
-
-    pipeline.descriptor_set_layouts.push_back(descriptor_set_layout);
-  }
 
   VkPipelineLayoutCreateInfo pipeline_layout_info{};
   pipeline_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -252,8 +277,8 @@ Pipeline create_pipeline(Device *device, VkRenderPass render_pass)
   }
 
   Temp tmp;
-  File vert_shader_file = read_file("resources/shaders/dui/vert.spv", &tmp);
-  File frag_shader_file = read_file("resources/shaders/dui/frag.spv", &tmp);
+  File vert_shader_file = read_file(shaders_definition.vert_shader, &tmp);
+  File frag_shader_file = read_file(shaders_definition.frag_shader, &tmp);
 
   VkShaderModule vert_shader_module =
       create_shader_module(device->device, vert_shader_file);
@@ -282,12 +307,25 @@ Pipeline create_pipeline(Device *device, VkRenderPass render_pass)
   pipeline_info.stageCount = 2;
   pipeline_info.pStages    = shader_stages;
 
+  VkPipelineDepthStencilStateCreateInfo depth_stencil{};
+  depth_stencil.sType =
+      VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+  depth_stencil.depthTestEnable       = VK_TRUE;
+  depth_stencil.depthWriteEnable      = VK_TRUE;
+  depth_stencil.depthCompareOp        = VK_COMPARE_OP_LESS;
+  depth_stencil.depthBoundsTestEnable = VK_FALSE;
+  depth_stencil.minDepthBounds        = 0.0f;
+  depth_stencil.maxDepthBounds        = 1.0f;
+  depth_stencil.stencilTestEnable     = VK_FALSE;
+  depth_stencil.front                 = {};
+  depth_stencil.back                  = {};
+
   pipeline_info.pVertexInputState   = &vertex_input_info;
   pipeline_info.pInputAssemblyState = &input_assembly;
   pipeline_info.pViewportState      = &viewport_state;
   pipeline_info.pRasterizationState = &rasterizer;
   pipeline_info.pMultisampleState   = &multisampling;
-  pipeline_info.pDepthStencilState  = nullptr;  // Optional
+  pipeline_info.pDepthStencilState  = &depth_stencil;
   pipeline_info.pColorBlendState    = &color_blending;
   pipeline_info.pDynamicState       = &dynamic_state;
 
@@ -295,8 +333,8 @@ Pipeline create_pipeline(Device *device, VkRenderPass render_pass)
   pipeline_info.renderPass = render_pass;
   pipeline_info.subpass    = 0;
 
-  pipeline_info.basePipelineHandle = VK_NULL_HANDLE;  // Optional
-  pipeline_info.basePipelineIndex  = -1;              // Optional
+  pipeline_info.basePipelineHandle = VK_NULL_HANDLE;
+  pipeline_info.basePipelineIndex  = -1;
 
   if (vkCreateGraphicsPipelines(device->device, VK_NULL_HANDLE, 1,
                                 &pipeline_info, nullptr,
@@ -333,17 +371,8 @@ VkDescriptorSet create_descriptor_set(Device *device, Pipeline pipeline)
   return descriptor_set;
 }
 
-void start_command_buffer(Device *device, Pipeline pipeline)
+void start_backbuffer(Device *device)
 {
-  vkResetCommandBuffer(device->command_buffer, 0);
-
-  VkCommandBufferBeginInfo begin_info{};
-  begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-
-  if (vkBeginCommandBuffer(device->command_buffer, &begin_info) != VK_SUCCESS) {
-    fatal("failed to begin recording command buffer!");
-  }
-
   VkRenderPassBeginInfo render_pass_info{};
   render_pass_info.sType      = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
   render_pass_info.renderPass = device->render_pass;
@@ -358,35 +387,33 @@ void start_command_buffer(Device *device, Pipeline pipeline)
 
   vkCmdBeginRenderPass(device->command_buffer, &render_pass_info,
                        VK_SUBPASS_CONTENTS_INLINE);
+}
 
-  vkCmdBindPipeline(device->command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    pipeline.ref);
+void end_backbuffer(Device *device)
+{
+  vkCmdEndRenderPass(device->command_buffer);
+}
 
-  VkViewport viewport{};
-  viewport.x        = 0.0f;
-  viewport.y        = 0.0f;
-  viewport.width    = (f32)device->swap_chain_extent.width;
-  viewport.height   = (f32)device->swap_chain_extent.height;
-  viewport.minDepth = 0.0f;
-  viewport.maxDepth = 1.0f;
-  vkCmdSetViewport(device->command_buffer, 0, 1, &viewport);
+void start_command_buffer(Device *device)
+{
+  vkResetCommandBuffer(device->command_buffer, 0);
 
-  VkRect2D scissor{};
-  scissor.offset = {0, 0};
-  scissor.extent = device->swap_chain_extent;
-  vkCmdSetScissor(device->command_buffer, 0, 1, &scissor);
+  VkCommandBufferBeginInfo begin_info{};
+  begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+
+  if (vkBeginCommandBuffer(device->command_buffer, &begin_info) != VK_SUCCESS) {
+    fatal("failed to begin recording command buffer!");
+  }
 }
 
 void end_command_buffer(Device *device)
 {
-  vkCmdEndRenderPass(device->command_buffer);
-
   if (vkEndCommandBuffer(device->command_buffer) != VK_SUCCESS) {
     fatal("failed to record command buffer!");
   }
 }
 
-void start_frame(Device *device, Pipeline pipeline)
+void start_frame(Device *device)
 {
   vkWaitForFences(device->device, 1, &in_flight_fence, VK_TRUE, UINT64_MAX);
   vkResetFences(device->device, 1, &in_flight_fence);
@@ -395,7 +422,7 @@ void start_frame(Device *device, Pipeline pipeline)
                         image_available_semaphore, VK_NULL_HANDLE,
                         &device->current_image_index);
 
-  start_command_buffer(device, pipeline);
+  start_command_buffer(device);
 }
 
 void end_frame(Device *device)
@@ -444,6 +471,26 @@ void end_frame(Device *device)
   }
 }
 
+void bind_pipeline(Device *device, Pipeline pipeline, Vec2u framebuffer_size)
+{
+  vkCmdBindPipeline(device->command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    pipeline.ref);
+
+  VkViewport viewport{};
+  viewport.x        = 0.0f;
+  viewport.y        = 0.0f;
+  viewport.width    = (f32)framebuffer_size.x;
+  viewport.height   = (f32)framebuffer_size.y;
+  viewport.minDepth = 0.0f;
+  viewport.maxDepth = 1.0f;
+  vkCmdSetViewport(device->command_buffer, 0, 1, &viewport);
+
+  VkRect2D scissor{};
+  scissor.offset = {0, 0};
+  scissor.extent = device->swap_chain_extent;
+  vkCmdSetScissor(device->command_buffer, 0, 1, &scissor);
+}
+
 void bind_descriptor_set(Device *device, Pipeline pipeline,
                          VkDescriptorSet descriptor_set)
 {
@@ -471,8 +518,8 @@ void bind_storage_buffer(Device *device, VkDescriptorSet descriptor_set,
 {
   VkDescriptorBufferInfo buffer_info{};
   buffer_info.buffer = buffer.ref;
+  buffer_info.range  = buffer.size;
   buffer_info.offset = 0;
-  buffer_info.range  = MB;
 
   VkWriteDescriptorSet descriptor_write{};
   descriptor_write.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -485,3 +532,5 @@ void bind_storage_buffer(Device *device, VkDescriptorSet descriptor_set,
 
   vkUpdateDescriptorSets(device->device, 1, &descriptor_write, 0, nullptr);
 }
+
+}  // namespace Gpu

@@ -6,6 +6,8 @@
 #include "gpu/vulkan/device.hpp"
 #include "logging.hpp"
 
+namespace Gpu
+{
 struct Buffer {
   VkBuffer ref;
   VkDeviceMemory memory;
@@ -170,3 +172,16 @@ void draw_indexed(Device *device, Buffer index_buffer, u32 offset,
 
   vkCmdDrawIndexed(device->command_buffer, vert_count, 1, offset, 0, 0);
 };
+
+void draw_indexed(Device *device, Buffer vertex_buffer, Buffer index_buffer, u32 offset,
+                  u32 vert_count)
+{
+  VkDeviceSize offsets[]    = {0};
+  vkCmdBindVertexBuffers(device->command_buffer, 0, 1, &vertex_buffer.ref, offsets);
+  vkCmdBindIndexBuffer(device->command_buffer, index_buffer.ref, 0,
+                       VK_INDEX_TYPE_UINT32);
+
+  vkCmdDrawIndexed(device->command_buffer, vert_count, 1, offset, 0, 0);
+};
+
+}  // namespace Gpu

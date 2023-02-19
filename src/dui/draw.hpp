@@ -85,12 +85,12 @@ struct DrawCall {
 struct DrawList {
   u64 frame = 0;
 
-  ImageBuffer image;
+  Gpu::ImageBuffer image;
   VkImageView image_view;
   VkSampler sampler;
   VkDescriptorSet desc_set;
 
-  Buffer primitive_buffer;
+  Gpu::Buffer primitive_buffer;
 
   Font font;
   VectorFont vfont;
@@ -111,7 +111,7 @@ struct DrawList {
 
   u32 *verts     = nullptr;
   i32 vert_count = 0;
-  Buffer index_buffer;
+  Gpu::Buffer index_buffer;
 
   Array<DrawCall, 128> draw_calls;
   i32 max_z = 0;
@@ -152,7 +152,7 @@ void push_base_scissor(DrawList *dl)
   dl->scissors.push_back(dl->scissors[0]);
 }
 
-u32 push_texture(Device *device, DrawList *dl, VkImageView image_view,
+u32 push_texture(Gpu::Device *device, DrawList *dl, VkImageView image_view,
                  VkSampler sampler)
 {
   bind_sampler(device, dl->desc_set, image_view, sampler, 0,
@@ -442,10 +442,10 @@ void push_texture_rect(DrawList *dl, i32 z, Rect rect, Vec4f uv_bounds,
   push_draw_call(dl, 2, z);
 }
 
-void init_draw_system(DrawList *dl, Device *device, Pipeline pipeline)
+void init_draw_system(DrawList *dl, Gpu::Device *device, Gpu::Pipeline pipeline)
 {
   // TODO: create pipeline here
-  dl->desc_set = create_descriptor_set(device, pipeline);
+  dl->desc_set = Gpu::create_descriptor_set(device, pipeline);
 
   dl->vfont = create_font("resources/fonts/OpenSans-Regular.ttf");
   for (i32 i = 0; i < dl->vfont.curves.size; i++) {
@@ -486,7 +486,7 @@ void draw_system_start_frame(DrawList *dl)
   push_scissor(dl, {0, 0, 100000, 100000});
 }
 
-void draw_system_end_frame(DrawList *dl, Device *device, Pipeline pipeline,
+void draw_system_end_frame(DrawList *dl, Gpu::Device *device, Gpu::Pipeline pipeline,
                            Vec2f canvas_size, u64 frame)
 {
   if (dl->frame != frame) {
@@ -495,16 +495,16 @@ void draw_system_end_frame(DrawList *dl, Device *device, Pipeline pipeline,
                          sizeof(dl->primitives));
   }
 
-  bind_descriptor_set(device, pipeline, dl->desc_set);
-  upload_buffer_staged(device, dl->index_buffer, dl->verts,
+  Gpu::bind_descriptor_set(device, pipeline, dl->desc_set);
+  Gpu::upload_buffer_staged(device, dl->index_buffer, dl->verts,
                        dl->vert_count * sizeof(u32));
-  push_constant(device, pipeline, &canvas_size, sizeof(Vec2f));
+  Gpu::push_constant(device, pipeline, &canvas_size, sizeof(Vec2f));
 
   for (i32 z = dl->max_z; z >= 0; z--) {
     for (i32 i = 0; i < dl->draw_calls.size; i++) {
       DrawCall call = dl->draw_calls[i];
       if (call.z == z) {
-        draw_indexed(device, dl->index_buffer, call.vert_offset,
+        Gpu::draw_indexed(device, dl->index_buffer, call.vert_offset,
                      call.tri_count * 3);
       }
     }

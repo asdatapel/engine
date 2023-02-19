@@ -5,6 +5,8 @@
 #include "gpu/vulkan/vulkan.hpp"
 #include "image.hpp"
 
+namespace Gpu
+{
 struct ImageBuffer {
   VkImage image;
   VkDeviceMemory memory;
@@ -49,7 +51,7 @@ ImageBuffer create_image(Device *device, u32 width, u32 height, VkFormat format)
   VkDeviceMemory memory;
   if (vkAllocateMemory(device->device, &alloc_info, nullptr, &memory) !=
       VK_SUCCESS) {
-    fatal("failed to allocate vertex buffer memory!");
+    fatal("failed to allocate memory!");
   }
 
   vkBindImageMemory(device->device, image_ref, memory, 0);
@@ -174,7 +176,8 @@ void upload_image(Device *device, ImageBuffer image_buf, Image image)
   destroy_buffer(device, staging_buffer);
 }
 
-VkImageView create_image_view(Device *device, ImageBuffer image_buf, VkFormat format)
+VkImageView create_image_view(Device *device, ImageBuffer image_buf,
+                              VkFormat format)
 {
   VkImageViewCreateInfo view_info{};
   view_info.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -196,16 +199,20 @@ VkImageView create_image_view(Device *device, ImageBuffer image_buf, VkFormat fo
   return image_view;
 }
 
-VkSampler create_sampler(Device *device, b8 linear_filter = true, b8 repeat = true)
+VkSampler create_sampler(Device *device, b8 linear_filter = true,
+                         b8 repeat = true)
 {
   VkSamplerCreateInfo sampler_info{};
   sampler_info.sType     = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
   sampler_info.magFilter = linear_filter ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
   sampler_info.minFilter = linear_filter ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
 
-  sampler_info.addressModeU = repeat ? VK_SAMPLER_ADDRESS_MODE_REPEAT : VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-  sampler_info.addressModeV = repeat ? VK_SAMPLER_ADDRESS_MODE_REPEAT : VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-  sampler_info.addressModeW = repeat ? VK_SAMPLER_ADDRESS_MODE_REPEAT : VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  sampler_info.addressModeU = repeat ? VK_SAMPLER_ADDRESS_MODE_REPEAT
+                                     : VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  sampler_info.addressModeV = repeat ? VK_SAMPLER_ADDRESS_MODE_REPEAT
+                                     : VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  sampler_info.addressModeW = repeat ? VK_SAMPLER_ADDRESS_MODE_REPEAT
+                                     : VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
 
   sampler_info.anisotropyEnable = VK_FALSE;
   sampler_info.maxAnisotropy    = 0;
@@ -220,7 +227,8 @@ VkSampler create_sampler(Device *device, b8 linear_filter = true, b8 repeat = tr
 }
 
 void bind_sampler(Device *device, VkDescriptorSet descriptor_set,
-                   VkImageView image_view, VkSampler sampler, u32 binding, u32 index = 0)
+                  VkImageView image_view, VkSampler sampler, u32 binding,
+                  u32 index = 0)
 {
   VkDescriptorImageInfo image_info{};
   image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -260,3 +268,4 @@ void bind_sampler(Device *device, VkDescriptorSet descriptor_set,
 
 //   return tex;
 // }
+}  // namespace Gpu

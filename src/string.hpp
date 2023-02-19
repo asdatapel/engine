@@ -47,6 +47,15 @@ struct String {
     }
     return val;
   }
+
+  b8 operator==(const String &other)
+  {
+    if (size != other.size) return false;
+    for (i32 i = 0; i < size; i++) {
+      if (data[i] != other.data[i]) return false;
+    }
+    return true;
+  }
 };
 
 template <u64 CAPACITY>

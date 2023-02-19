@@ -7,6 +7,8 @@
 #include "logging.hpp"
 #include "platform.hpp"
 
+namespace Gpu
+{
 struct Device {
   u32 current_image_index = 0;
 
@@ -172,7 +174,7 @@ Device init_device(Platform::VulkanExtensions vulkan_extensions,
                                          combined_sampler_pool_size};
 
     VkDescriptorPoolCreateInfo pool_info{};
-    pool_info.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT_EXT;
     pool_info.poolSizeCount = 3;
     pool_info.pPoolSizes    = pool_sizes;
@@ -454,3 +456,4 @@ u32 find_memory_type(Device *device, u32 type_filter,
   fatal("failed to find suitable memory type!");
   return -1;
 };
+}  // namespace Gpu

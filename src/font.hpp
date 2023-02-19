@@ -1,7 +1,7 @@
 #pragma once
 
 #define STB_TRUETYPE_IMPLEMENTATION
-#include "external/stb/stb_truetype.h"
+#include <third_party/stb/stb_truetype.h>
 
 #include "file.hpp"
 #include "image.hpp"
