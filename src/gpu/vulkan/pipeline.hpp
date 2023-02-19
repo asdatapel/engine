@@ -105,7 +105,8 @@ Array<VkDescriptorSetLayout, 4> create_dui_descriptor_set_layouts(Device *device
 {
   Array<VkDescriptorSetLayout, 4> layouts;
 
-  Array<VkDescriptorBindingFlags, 1> binding_flags = {
+  Array<VkDescriptorBindingFlags, 2> binding_flags = {
+      VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT, 
       VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT};
   VkDescriptorSetLayoutBindingFlagsCreateInfoEXT extended_info{};
   extended_info.sType =

@@ -2,6 +2,12 @@
 
 #include <vulkan/vulkan.h>
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wnullability-completeness"
+#define VMA_IMPLEMENTATION
+#include <vk_mem_alloc.h>
+#pragma clang diagnostic pop
+
 #include "containers/array.hpp"
 #include "file.hpp"
 #include "logging.hpp"
@@ -34,6 +40,8 @@ struct Device {
   VkCommandBuffer command_buffer;
 
   VkDescriptorPool descriptor_pool;
+
+  VmaAllocator vma_allocator;
 };
 
 Device init_device(Platform::VulkanExtensions vulkan_extensions,
@@ -88,11 +96,12 @@ Device init_device(Platform::VulkanExtensions vulkan_extensions,
 
   // select queue family
   {
-    u32 queue_family_count = 0;
-    VkQueueFamilyProperties queue_families[128];
+    Array<VkQueueFamilyProperties, 128> queue_families;
+    vkGetPhysicalDeviceQueueFamilyProperties(device.physical_device,
+                                             &queue_families.size, nullptr);
     vkGetPhysicalDeviceQueueFamilyProperties(
-        device.physical_device, &queue_family_count, queue_families);
-    for (i32 i = 0; i < queue_family_count; i++) {
+        device.physical_device, &queue_families.size, queue_families.data);
+    for (i32 i = 0; i < queue_families.size; i++) {
       VkQueueFamilyProperties queue_family = queue_families[i];
       if (queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
         device.graphics_queue_family = i;
@@ -166,8 +175,8 @@ Device init_device(Platform::VulkanExtensions vulkan_extensions,
     uniforms_pool_size.type            = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     uniforms_pool_size.descriptorCount = 1000;
     VkDescriptorPoolSize combined_sampler_pool_size{};
-    uniforms_pool_size.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    uniforms_pool_size.descriptorCount = 1001;
+    combined_sampler_pool_size.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    combined_sampler_pool_size.descriptorCount = 1001;
 
     VkDescriptorPoolSize pool_sizes[] = {storage_buffer_pool_size,
                                          uniforms_pool_size,
@@ -184,6 +193,14 @@ Device init_device(Platform::VulkanExtensions vulkan_extensions,
                                &device.descriptor_pool) != VK_SUCCESS) {
       fatal("failed to create descriptor pool!");
     }
+  }
+
+  {
+    VmaAllocatorCreateInfo allocatorInfo = {};
+    allocatorInfo.physicalDevice         = device.physical_device;
+    allocatorInfo.device                 = device.device;
+    allocatorInfo.instance               = device.vulkan_instance;
+    vmaCreateAllocator(&allocatorInfo, &device.vma_allocator);
   }
 
   return device;
@@ -239,7 +256,7 @@ void init_swap_chain(Device *device)
   VkSwapchainCreateInfoKHR create_info{};
   create_info.sType            = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
   create_info.surface          = device->surface;
-  create_info.minImageCount    = 2;
+  create_info.minImageCount    = 3;
   create_info.imageFormat      = surface_format.format;
   create_info.imageColorSpace  = surface_format.colorSpace;
   create_info.imageExtent      = extent;

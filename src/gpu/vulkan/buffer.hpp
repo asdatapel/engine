@@ -10,13 +10,14 @@ namespace Gpu
 {
 struct Buffer {
   VkBuffer ref;
-  VkDeviceMemory memory;
+  VmaAllocation vma_allocation;
   u32 size;
 };
 Array<Buffer, 1024> buffers;
 
 Buffer create_buffer(Device *device, VkDeviceSize size,
-                     VkBufferUsageFlags usage, VkMemoryPropertyFlags properties)
+                     VkBufferUsageFlags usage,
+                     VmaAllocationCreateFlags vma_alloc_create_flags)
 {
   Buffer buffer;
   buffer.size = size;
@@ -27,34 +28,48 @@ Buffer create_buffer(Device *device, VkDeviceSize size,
   buffer_info.usage       = usage;
   buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-  if (vkCreateBuffer(device->device, &buffer_info, nullptr, &buffer.ref) !=
-      VK_SUCCESS) {
-    fatal("failed to create buffer!");
-  }
+  VmaAllocationCreateInfo vma_alloc_info = {};
+  vma_alloc_info.usage                   = VMA_MEMORY_USAGE_AUTO;
+  vma_alloc_info.flags                   = vma_alloc_create_flags;
 
-  VkMemoryRequirements mem_requirements;
-  vkGetBufferMemoryRequirements(device->device, buffer.ref, &mem_requirements);
+  // allocate the buffer
+  if (vmaCreateBuffer(device->vma_allocator, &buffer_info, &vma_alloc_info,
+                      &buffer.ref, &buffer.vma_allocation,
+                      nullptr) != VK_SUCCESS) {
+    fatal("failed to allocate buffer!");
+  };
 
-  VkMemoryAllocateInfo alloc_info{};
-  alloc_info.sType          = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-  alloc_info.allocationSize = mem_requirements.size;
-  alloc_info.memoryTypeIndex =
-      find_memory_type(device, mem_requirements.memoryTypeBits, properties);
+  // if (vkCreateBuffer(device->device, &buffer_info, nullptr, &buffer.ref) !=
+  //     VK_SUCCESS) {
+  //   fatal("failed to create buffer!");
+  // }
 
-  if (vkAllocateMemory(device->device, &alloc_info, nullptr, &buffer.memory) !=
-      VK_SUCCESS) {
-    fatal("failed to allocate buffer memory!");
-  }
+  // VkMemoryRequirements mem_requirements;
+  // vkGetBufferMemoryRequirements(device->device, buffer.ref,
+  // &mem_requirements);
 
-  vkBindBufferMemory(device->device, buffer.ref, buffer.memory, 0);
+  // VkMemoryAllocateInfo alloc_info{};
+  // alloc_info.sType          = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+  // alloc_info.allocationSize = mem_requirements.size;
+  // alloc_info.memoryTypeIndex =
+  //     find_memory_type(device, mem_requirements.memoryTypeBits, properties);
+
+  // if (vkAllocateMemory(device->device, &alloc_info, nullptr, &buffer.memory)
+  // !=
+  //     VK_SUCCESS) {
+  //   fatal("failed to allocate buffer memory!");
+  // }
+
+  // vkBindBufferMemory(device->device, buffer.ref, buffer.memory, 0);
 
   return buffer;
 }
 
 void destroy_buffer(Device *device, Buffer b)
 {
-  vkDestroyBuffer(device->device, b.ref, nullptr);
-  vkFreeMemory(device->device, b.memory, nullptr);
+  vmaDestroyBuffer(device->vma_allocator, b.ref, b.vma_allocation);
+  // vkDestroyBuffer(device->device, b.ref, nullptr);
+  // vkFreeMemory(device->device, b.memory, nullptr);
 }
 
 void copy_buffer(Device *device, Buffer src, Buffer dst, u64 size)
@@ -100,13 +115,14 @@ void upload_buffer_staged(Device *device, Buffer buffer, void *data, u32 size)
 
   Buffer staging_buffer =
       create_buffer(device, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+                    VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                        VMA_ALLOCATION_CREATE_MAPPED_BIT);
 
-  void *dest;
-  vkMapMemory(device->device, staging_buffer.memory, 0, size, 0, &dest);
+  // vkMapMemory(device->device, staging_buffer.memory, 0, size, 0, &dest);
+  // vkUnmapMemory(device->device, staging_buffer.memory);
+
+  void *dest = staging_buffer.vma_allocation->GetMappedData();
   memcpy(dest, data, size);
-  vkUnmapMemory(device->device, staging_buffer.memory);
 
   copy_buffer(device, staging_buffer, buffer, size);
 
@@ -116,17 +132,17 @@ void upload_buffer_staged(Device *device, Buffer buffer, void *data, u32 size)
 void upload_buffer(Device *device, Buffer buffer, void *data, u32 size)
 {
   void *dest;
-  vkMapMemory(device->device, buffer.memory, 0, size, 0, &dest);
+  vkMapMemory(device->device, buffer.vma_allocation->GetMemory(),
+              buffer.vma_allocation->GetOffset(), size, 0, &dest);
   memcpy(dest, data, size);
-  vkUnmapMemory(device->device, buffer.memory);
+  vkUnmapMemory(device->device, buffer.vma_allocation->GetMemory());
 }
 
 Buffer create_vertex_buffer(Device *device, u32 size)
 {
   Buffer vertex_buffer = create_buffer(
       device, size,
-      VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+      VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 0);
   buffers.push_back(vertex_buffer);
 
   return vertex_buffer;
@@ -136,8 +152,7 @@ Buffer create_index_buffer(Device *device, u32 size)
 {
   Buffer buffer = create_buffer(
       device, size,
-      VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+      VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, 0);
   buffers.push_back(buffer);
 
   return buffer;
@@ -147,8 +162,7 @@ Buffer create_storage_buffer(Device *device, u32 size)
 {
   Buffer buffer = create_buffer(
       device, size,
-      VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+      VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, 0);
   buffers.push_back(buffer);
 
   return buffer;
@@ -166,18 +180,19 @@ void draw_vertex_buffer(Device *device, Buffer b, u32 offset, u32 vert_count)
 void draw_indexed(Device *device, Buffer index_buffer, u32 offset,
                   u32 vert_count)
 {
-  vkCmdBindVertexBuffers(device->command_buffer, 0, 0, nullptr, nullptr);
+  // vkCmdBindVertexBuffers(device->command_buffer, 0, 0, nullptr, nullptr);
   vkCmdBindIndexBuffer(device->command_buffer, index_buffer.ref, 0,
                        VK_INDEX_TYPE_UINT32);
 
   vkCmdDrawIndexed(device->command_buffer, vert_count, 1, offset, 0, 0);
 };
 
-void draw_indexed(Device *device, Buffer vertex_buffer, Buffer index_buffer, u32 offset,
-                  u32 vert_count)
+void draw_indexed(Device *device, Buffer vertex_buffer, Buffer index_buffer,
+                  u32 offset, u32 vert_count)
 {
-  VkDeviceSize offsets[]    = {0};
-  vkCmdBindVertexBuffers(device->command_buffer, 0, 1, &vertex_buffer.ref, offsets);
+  VkDeviceSize offsets[] = {0};
+  vkCmdBindVertexBuffers(device->command_buffer, 0, 1, &vertex_buffer.ref,
+                         offsets);
   vkCmdBindIndexBuffer(device->command_buffer, index_buffer.ref, 0,
                        VK_INDEX_TYPE_UINT32);
 

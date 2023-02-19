@@ -14,7 +14,7 @@ struct State {
   Gpu::Pipeline pipeline;
 };
 
-State init() {}
+State init() {return {};}
 
 void do_frame(Gpu::Device *gpu, Gpu::Pipeline pipeline,
               Platform::GlfwWindow *window, Input *input)

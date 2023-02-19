@@ -4,6 +4,6 @@
 [submodule "third_party/vk_mem_alloc"]
 	path = third_party/vk_mem_alloc
 	url = git@github.com:GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
-[submodule "thid_party"]
+[submodule "third_party/glm"]
 	path = third_party/glm
 	url = git@github.com:g-truc/glm.git

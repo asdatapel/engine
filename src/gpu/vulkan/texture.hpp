@@ -115,8 +115,8 @@ void upload_image(Device *device, ImageBuffer image_buf, Image image)
 
   Buffer staging_buffer =
       create_buffer(device, image.size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+                    VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                        VMA_ALLOCATION_CREATE_MAPPED_BIT);
 
   upload_buffer(device, staging_buffer, image.data(), image.size);
 

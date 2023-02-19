@@ -19,4 +19,5 @@ clang.exe -g -std=c++17 src/editor_main.cpp -o \
   -I ./third_party/glfw3.4/include ./third_party/glfw3.4/glfw3dll.lib \
   -I "C:\Users\Asad\VulkanSdk\1.3.231.1\Include" "C:\Users\Asad\VulkanSdk\1.3.231.1\Lib\vulkan-1.lib"  \
   -I ./third_party/freetype/include ./third_party/freetype/debug/freetyped.lib \
-  -I ./third_party/assimp/include   ./third_party/assimp/lib/assimp-vc141-mt.lib
+  -I ./third_party/assimp/include   ./third_party/assimp/lib/assimp-vc141-mt.lib \
+  -I ./third_party/vk_mem_alloc/include
