@@ -13,6 +13,7 @@ namespace Gpu
 {
 
 enum struct Format {
+  RGBA8U,
   RG32F,
   RGB32F,
   RGBA32F,
@@ -20,6 +21,8 @@ enum struct Format {
 VkFormat to_vk_format(Format f)
 {
   switch (f) {
+    case Format::RGBA8U:
+      return VK_FORMAT_R8G8B8A8_UINT;
     case Format::RG32F:
       return VK_FORMAT_R32G32_SFLOAT;
     case Format::RGB32F:
@@ -31,6 +34,8 @@ VkFormat to_vk_format(Format f)
 i32 format_size(Format f)
 {
   switch (f) {
+    case Format::RGBA8U:
+      return 4;
     case Format::RG32F:
       return 8;
     case Format::RGB32F:
@@ -101,12 +106,13 @@ struct Pipeline {
   Array<VkDescriptorSetLayout, 4> descriptor_set_layouts;
 };
 
-Array<VkDescriptorSetLayout, 4> create_dui_descriptor_set_layouts(Device *device)
+Array<VkDescriptorSetLayout, 4> create_dui_descriptor_set_layouts(
+    Device *device)
 {
   Array<VkDescriptorSetLayout, 4> layouts;
 
   Array<VkDescriptorBindingFlags, 2> binding_flags = {
-      VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT, 
+      VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT,
       VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT};
   VkDescriptorSetLayoutBindingFlagsCreateInfoEXT extended_info{};
   extended_info.sType =
@@ -117,7 +123,7 @@ Array<VkDescriptorSetLayout, 4> create_dui_descriptor_set_layouts(Device *device
 
   VkDescriptorSetLayoutBinding sampler_layout_binding{};
   sampler_layout_binding.binding         = 0;
-  sampler_layout_binding.descriptorCount = 1000;
+  sampler_layout_binding.descriptorCount = 200;
   sampler_layout_binding.descriptorType =
       VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
   sampler_layout_binding.pImmutableSamplers = nullptr;
@@ -357,14 +363,14 @@ void destroy_pipeline(Device *device, Pipeline pipeline)
 
 VkDescriptorSet create_descriptor_set(Device *device, Pipeline pipeline)
 {
-  VkDescriptorSetAllocateInfo allocInfo{};
-  allocInfo.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-  allocInfo.descriptorPool     = device->descriptor_pool;
-  allocInfo.descriptorSetCount = 1;
-  allocInfo.pSetLayouts        = pipeline.descriptor_set_layouts.data;
+  VkDescriptorSetAllocateInfo alloc_info{};
+  alloc_info.sType          = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+  alloc_info.descriptorPool = device->descriptor_pool;
+  alloc_info.descriptorSetCount = 1;
+  alloc_info.pSetLayouts        = pipeline.descriptor_set_layouts.data;
 
   VkDescriptorSet descriptor_set;
-  if (vkAllocateDescriptorSets(device->device, &allocInfo, &descriptor_set) !=
+  if (vkAllocateDescriptorSets(device->device, &alloc_info, &descriptor_set) !=
       VK_SUCCESS) {
     fatal("failed to allocate descriptor sets!");
   }

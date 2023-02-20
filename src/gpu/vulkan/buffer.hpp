@@ -68,8 +68,6 @@ Buffer create_buffer(Device *device, VkDeviceSize size,
 void destroy_buffer(Device *device, Buffer b)
 {
   vmaDestroyBuffer(device->vma_allocator, b.ref, b.vma_allocation);
-  // vkDestroyBuffer(device->device, b.ref, nullptr);
-  // vkFreeMemory(device->device, b.memory, nullptr);
 }
 
 void copy_buffer(Device *device, Buffer src, Buffer dst, u64 size)
@@ -117,9 +115,6 @@ void upload_buffer_staged(Device *device, Buffer buffer, void *data, u32 size)
       create_buffer(device, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                     VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
                         VMA_ALLOCATION_CREATE_MAPPED_BIT);
-
-  // vkMapMemory(device->device, staging_buffer.memory, 0, size, 0, &dest);
-  // vkUnmapMemory(device->device, staging_buffer.memory);
 
   void *dest = staging_buffer.vma_allocation->GetMappedData();
   memcpy(dest, data, size);

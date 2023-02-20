@@ -11,6 +11,11 @@ struct UploadedMesh {
   String filename;
   Gpu::Buffer vertex_buffer;
   Gpu::Buffer index_buffer;
+
+  VkDescriptorSet desc_set;
+  VkSampler sampler;
+  VkImageView image_view;
+  Gpu::ImageBuffer image_buf;
 };
 Array<UploadedMesh, 256> buffers;
 UploadedMesh *get_uploaded_mesh(String filename)
@@ -43,15 +48,29 @@ void model_viewer(Gpu::Device *gpu, Gpu::Pipeline pipeline, String filename)
     Gpu::upload_buffer_staged(gpu, um.index_buffer, mesh_data.indexes,
                               mesh_data.indexes_size * sizeof(u32));
 
+    Image image = read_image_file(
+        "../fracas/set/models/pedestal/Pedestal_Albedo.png", &system_allocator);
+    um.image_buf =
+        create_image(gpu, image.width, image.height, Gpu::Format::RGBA8U);
+    Gpu::upload_image(gpu, um.image_buf, image);
+
+    um.desc_set   = Gpu::create_descriptor_set(gpu, pipeline);
+    um.sampler    = create_sampler(gpu, false, false);
+    um.image_view = Gpu::create_image_view(gpu, um.image_buf,
+                                           VkFormat::VK_FORMAT_R8G8B8A8_SRGB);
+    bind_sampler(gpu, um.desc_set, um.image_view, um.sampler, 0, 0);
+
     i32 new_i = buffers.push_back(um);
     mesh      = &buffers[new_i];
   }
+
+  Gpu::bind_descriptor_set(gpu, pipeline, mesh->desc_set);
 
   static f32 t = 0.f;
   t += .1f;
 
   f32 horizontal_angle = 0.f;
-  Vec3f camera_pos     = {1 * cosf(t), 1 * sinf(t), 0};
+  Vec3f camera_pos     = {2 * cosf(t), 2 * sinf(t), 2 * sinf(t)};
 
   Mat4f mvp = perspective(3.1415 / 2.f, 1, 0.001, 1000) *
               look_at(camera_pos, {0, 0, 0}, normalize(Vec3f{0, 1, 0}));

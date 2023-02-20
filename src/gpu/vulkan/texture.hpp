@@ -12,7 +12,7 @@ struct ImageBuffer {
   VkDeviceMemory memory;
 };
 
-ImageBuffer create_image(Device *device, u32 width, u32 height, VkFormat format)
+ImageBuffer create_image(Device *device, u32 width, u32 height, Format format)
 {
   VkImageCreateInfo image_info{};
   image_info.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -24,7 +24,7 @@ ImageBuffer create_image(Device *device, u32 width, u32 height, VkFormat format)
   image_info.arrayLayers   = 1;
   image_info.samples       = VK_SAMPLE_COUNT_1_BIT;
   image_info.flags         = 0;  // Optional
-  image_info.format        = format;
+  image_info.format        = to_vk_format(format);
   image_info.tiling        = VK_IMAGE_TILING_OPTIMAL;
   image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
   image_info.usage =
@@ -115,8 +115,7 @@ void upload_image(Device *device, ImageBuffer image_buf, Image image)
 
   Buffer staging_buffer =
       create_buffer(device, image.size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                    VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-                        VMA_ALLOCATION_CREATE_MAPPED_BIT);
+                    VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
 
   upload_buffer(device, staging_buffer, image.data(), image.size);
 

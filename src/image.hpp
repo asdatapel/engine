@@ -1,6 +1,10 @@
 #pragma once
 
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb/stb_image.h>
+
 #include "memory.hpp"
+#include "math/math.hpp"
 #include "types.hpp"
 
 struct Image {
@@ -20,3 +24,22 @@ struct Image {
 
   u8 *data() { return mem.data; };
 };
+
+Image read_image_file(String path, Allocator *allocator)
+{
+  Temp temp;
+  File file = read_file(path, &temp);
+
+  Vec2i size;
+  i32 channels       = 0;
+  stbi_set_flip_vertically_on_load(true);
+  stbi_uc *stb_image = stbi_load_from_memory(file.data.data, file.data.size,
+                                             &size.x, &size.y, &channels, 4);
+
+  Image image(size.x, size.y, 4, allocator);
+  memcpy(image.data(), stb_image, size.x * size.y * 4);
+
+  stbi_image_free(stb_image);
+
+  return image;
+}
