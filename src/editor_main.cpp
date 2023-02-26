@@ -7,6 +7,7 @@
 #include "gpu/vulkan/vulkan.hpp"
 #include "model_import.hpp"
 #include "platform.hpp"
+#include "editor/material_editor.hpp"
 #include "types.hpp"
 
 int main()

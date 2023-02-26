@@ -38,16 +38,6 @@ struct String {
     return String(data + from, to - from);
   }
 
-  u64 to_uint64()
-  {
-    u64 val = 0;
-    for (int i = 0; i < size; i++) {
-      if (data[i] < '0' && data[i] > '9') return val;
-      val = 10 * val + (data[i] - '0');
-    }
-    return val;
-  }
-
   b8 operator==(const String &other)
   {
     if (size != other.size) return false;
@@ -55,6 +45,16 @@ struct String {
       if (data[i] != other.data[i]) return false;
     }
     return true;
+  }
+
+  u64 to_u64()
+  {
+    u64 val = 0;
+    for (int i = 0; i < size; i++) {
+      if (data[i] < '0' && data[i] > '9') return val;
+      val = 10 * val + (data[i] - '0');
+    }
+    return val;
   }
 };
 
