@@ -80,6 +80,14 @@ Rect inset(Rect rect, f32 inset)
   rect.height -= inset * 2;
   return rect;
 }
+Rect outset(Rect rect, f32 outset)
+{
+  rect.x -= outset;
+  rect.y -= outset;
+  rect.width += outset * 2;
+  rect.height += outset * 2;
+  return rect;
+}
 Vec2f clamp_to_rect(Vec2f val, Rect rect)
 {
   return max(min(val, rect.xy() + rect.span()), Vec2f{0, 0});

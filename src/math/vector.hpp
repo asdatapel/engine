@@ -106,6 +106,11 @@ Vec2<T> clamp(Vec2<T> val, Vec2<T> min, Vec2<T> max)
 {
   return {clamp(val.x, min.x, max.x), clamp(val.y, min.y, max.y)};
 }
+template <typename T>
+Vec2<T> abs(Vec2<T> a)
+{
+  return {abs(a.x), abs(a.y)};
+}
 
 // Vec3
 template <typename T>

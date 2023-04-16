@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cstring>
 
+#include "memory.hpp"
 #include "types.hpp"
 
 struct String {
@@ -58,6 +59,21 @@ struct String {
   }
 };
 
+struct NullTerminatedString : String {
+  static NullTerminatedString concatenate(String str1, String str2, Allocator *allocator)
+  {
+    NullTerminatedString new_string;
+    new_string.size = str1.size + str2.size + 1;
+    new_string.data = (u8 *)allocator->alloc(new_string.size).data;
+
+    memcpy(new_string.data, str1.data, str1.size);
+    memcpy(new_string.data + str1.size, str2.data, str2.size);
+    new_string.data[new_string.size - 1] = '\0';
+
+    return new_string;
+  }
+};
+
 template <u64 CAPACITY>
 struct StaticString {
   static const u64 MAX_SIZE = CAPACITY;
@@ -80,6 +96,14 @@ struct StaticString {
     assert(N <= CAPACITY + 1);
     memcpy(data, str, N);
     size = N - 1;
+  }
+
+  StaticString(const String &str2)
+  {
+    assert(str2.size <= CAPACITY + 1);
+    memcpy(data, str2.data, CAPACITY);
+    size       = str2.size;
+    data[size] = '\0';
   }
 
   template <u64 CAPACITY_2>

@@ -3,6 +3,7 @@
 #include <ctype.h>
 
 #include "containers/array.hpp"
+#include "dui/nodes/retained_nodes.hpp"
 #include "gpu/vulkan/shader_models/pbr_lit.hpp"
 #include "logging.hpp"
 #include "math/math.hpp"
@@ -111,6 +112,9 @@ struct Vec4fValue {
   Vec4f value;
 };
 
+struct DataType {
+  i32 num_channels;
+};
 struct Node {
   String name;
 
@@ -123,9 +127,6 @@ struct Node {
   };
   Type type;
 
-  struct DataType {
-    i32 num_channels;
-  };
   DataType data_type;
 };
 
@@ -413,7 +414,8 @@ GeneratedShader material_nodes_test(String graph, ShaderModel shader_model,
 //       material_nodes_test(graph, pbr_lit_shader_model, &tmp_allocator);
 
 //   auto descriptor_set_layouts =
-//       Gpu::Vulkan::create_descriptor_set_layouts(gpu, frag_shader.num_textures);
+//       Gpu::Vulkan::create_descriptor_set_layouts(gpu,
+//       frag_shader.num_textures);
 
 //   Gpu::Pipeline pipeline = Gpu::create_pipeline(
 //       gpu, vert_shader.src, frag_shader.src, descriptor_set_layouts,
@@ -432,9 +434,128 @@ GeneratedShader material_nodes_test(String graph, ShaderModel shader_model,
 //   Gpu::destroy_pipeline(gpu, pipeline);
 
 //   descriptor_set_layouts =
-//       Gpu::Vulkan::create_descriptor_set_layouts(gpu, frag_shader.num_textures);
+//       Gpu::Vulkan::create_descriptor_set_layouts(gpu,
+//       frag_shader.num_textures);
 //   pipeline = Gpu::create_pipeline(
 //       gpu, vert_shader.src, frag_shader.src, descriptor_set_layouts,
 //       pbr_lit_shader_model.push_constants_size, standard_vertex_description,
 //       standard_render_pass);
 // }
+
+// ShaderNodeDefinition dumb = {{{"namme"}, {"other name"}}};
+
+void do_material_editor_window(Editor::State *state, MaterialEditorWindow *mew)
+{
+  Temp tmp;
+
+  Dui::start_window(mew->filename, {200, 200, 300, 300});
+
+  // Dui::start_node_editor_interactions("material_id");
+
+  // static b8 initted = false;
+  // if (!initted) {
+  //   initted    = true;
+  //   mew->nodes = {
+  //       {&dumb, Dui::create_node({100, 100}, 100, {.7, .2, .3, 1})},
+  //       {&dumb, Dui::create_node({100, 200}, 100, {.2, .7, .3, 1})},
+  //   };
+  // }
+
+  // for (i32 i = 0; i < mew->nodes.size; i++) {
+  //   ShaderNodeDefinition *node_def = mew->nodes[i].node_def;
+
+  //   Dui::start_node(&mew->nodes[i].dui_node_ref, i, "title");
+
+  //   for (i32 pin = 0; pin < node_def->inputs.size; pin++) {
+  //     Dui::node_input_pin(node_def->inputs[pin].name);
+  //   }
+  //   for (i32 pin = 0; pin < node_def->inputs.size; pin++) {
+  //     Dui::node_output_pin(node_def->inputs[pin].name);
+  //   }
+
+  //   Dui::end_node();
+  // }
+  // Dui::end_node_editor_interactions();
+
+  // // for (i32 i = 0; i < mew->links.size; i++) {
+  // //   Dui::node_link(&mew->links[i]);
+  // // }
+
+  // i32 node_to_move_up = Dui::which_node_moved_to_top();
+  // if (node_to_move_up > -1) {
+  //   ShaderNode this_node = mew->nodes[node_to_move_up];
+  //   for (i32 i = node_to_move_up; i < mew->nodes.size - 1; i++) {
+  //     mew->nodes[i] = mew->nodes[i + 1];
+  //   }
+
+  //   mew->nodes[mew->nodes.size - 1] = this_node;
+  // }
+
+  // if (Dui::button("Compile", {200, 100}, {.8, .2, .3, 1})) {
+  //   Node *output_node = find_output_node();
+
+  //   push("output(");
+  //   // specifically the pbr output type:
+  //   Pin *albedo_input = get_input(output_node, 0);
+  //   if (albedo_input) {
+  //     NodeOutput result = evaluate_pin(albedo_input);
+  //     validate(result.type, expected_pbr_type);
+  //     push(result.name);
+  //     push(", ");
+  //   }
+  //   else {
+  //     // use the default value
+  //   }
+  //   Pin roughness_input = get_input(output_node, 1);
+
+  // }
+
+  // if (Dui::button("Do it!", {200, 100}, {.8, .2, .3, 1})) {
+  //   GeneratedShader shader = material_nodes_test(
+  //       "time = input(per_frame_data.time, 1)"
+  //       "uv = input(in_uv, 2)"
+  //       "uv2 = add(time, uv)"
+  //       "diffuse = "
+  //       "texture(\"../fracas/set/models/pedestal/Pedestal_Albedo.png\", "
+  //       "4, uv2)"
+  //       "output_node = output_node(uv, diffuse)",
+  //       pbr_lit_shader_model, &tmp);
+
+  //   write_file(NullTerminatedString::concatenate(state->resource_path,
+  //                                                mew->filename, &tmp),
+  //              shader.src, true);
+  // }
+
+  Dui::NodeDefinition node_def_1;
+  Dui::NodeDefinition node_def_2;
+  node_def_1.name    = "node_name_1";
+  node_def_2.name    = "node_name_2";
+  node_def_1.color   = {0.17, .4, .17, 1};
+  node_def_2.color   = Color::from_int(0x83314a);
+  node_def_1.size    = 200;
+  node_def_2.size    = 100;
+  node_def_1.outputs = {{{"Position", 1}}};
+  node_def_2.outputs = {{{"AO", 1}, {"Color", 1}}};
+  node_def_1.inputs  = {{{"pin0", 1}}};
+  node_def_2.inputs  = {{{"pin1", 1}, {"pin2", 1}}};
+
+  static b8 init = false;
+  static Dui::NodesData nodes_data;
+  if (!init) {
+    init = true;
+
+    Dui::add_node(&nodes_data, &node_def_1);
+    Dui::add_node(&nodes_data, &node_def_1);
+    Dui::add_node(&nodes_data, &node_def_2);
+    Dui::add_node(&nodes_data, &node_def_2);
+    Dui::add_node(&nodes_data, &node_def_2);
+    Dui::add_node(&nodes_data, &node_def_2);
+    Dui::add_node(&nodes_data, &node_def_2);
+    Dui::add_node(&nodes_data, &node_def_2);
+    Dui::add_node(&nodes_data, &node_def_2);
+  }
+
+  Dui::do_nodes(&nodes_data);
+
+  Dui::end_window();
+}

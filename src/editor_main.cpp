@@ -40,7 +40,6 @@ int main()
   Input input;
   Platform::setup_input_callbacks(&window, &input);
 
-  init_dui_dll();
   Dui::init_dui(&device, pipeline);
 
   while (!window.should_close()) {
@@ -58,19 +57,12 @@ int main()
     Gpu::bind_pipeline(
         &device, pipeline,
         {device.swap_chain_extent.width, device.swap_chain_extent.height});
-    Dui::debug_ui_test(&device, pipeline, &input, &window,
-                       secondary_framebuffer);
     Editor::do_frame(&device, pipeline, &window, &input);
     Gpu::end_backbuffer(&device);
 
     Gpu::end_frame(&device);
-
-    if (input.key_down_events[(i32)Keys::ENTER]) {
-      Dui::ReloadData reload_data = Dui::get_plugin_reload_data();
-
-      init_dui_dll();
-      Dui::reload_plugin(reload_data);
-    }
+    
+    tmp_allocator.reset();
   }
 
   destroy_pipeline(&device, pipeline);

@@ -20,6 +20,7 @@ struct StaticPool {
   const static u64 SIZE = CAPACITY;
   Element elements[SIZE];
   u64 next = 0, last = 0;
+  u64 size = 0;
 
   StaticPool() { init(); }
 
@@ -69,11 +70,18 @@ struct StaticPool {
     next              = current->next;
     current->value    = value;
     current->assigned = true;
+
+    size++;
+
     return &current->value;
   }
 
   T *emplace(T value, u64 index)
   {
+    if (!elements[index].assigned) {
+      size++;
+    }
+
     if (next == index) {
       next = elements[index].next;
     }
@@ -98,7 +106,11 @@ struct StaticPool {
 
     elements[last].next = i;
     last                = i;
+
+    size--;
   }
 
   u64 index_of(T *ptr) { return ((Element *)ptr - elements); }
+
+  u64 get_size() { return size; }
 };

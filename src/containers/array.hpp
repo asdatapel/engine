@@ -3,7 +3,6 @@
 #include <cassert>
 #include <initializer_list>
 
-
 #include "types.hpp"
 
 template <typename T, u32 N>
@@ -82,4 +81,11 @@ struct Array {
   }
 
   void clear() { size = 0; }
+
+  i64 index_of(T *elem)
+  {
+    i64 index = elem - data;
+    if (index >= 0 && index < size) return index;
+    return -1;
+  }
 };

@@ -363,14 +363,22 @@ void push_vector_text(DrawList *dl, VectorFont *font, i32 z, String text,
   }
 };
 
+// axes: 0 for left, 1 for center, 2 for right
 void push_vector_text_justified(DrawList *dl, i32 z, String text, Vec2f pos,
-                                Color color, f32 size, Vec2b axes)
+                                Color color, f32 size, Vec2i axes)
 {
-  if (axes.x) {
-    f32 text_width = dl->vfont.get_text_width(text, size);
+  f32 text_width = dl->vfont.get_text_width(text, size);
+  if (axes.x == 2) {
     pos.x -= text_width;
+  } else if (axes.x == 1) {
+    pos.x -= text_width / 2.f;
   }
-  if (axes.y) pos.y += size;
+
+  if (axes.y == 2) {
+    pos.y -= size;
+  } else if (axes.y == 1) {
+    pos.y -= size / 2.f;
+  }
 
   for (int i = 0; i < text.size; i++) {
     Glyph g = dl->vfont.glyphs[text.data[i]];
@@ -486,8 +494,8 @@ void draw_system_start_frame(DrawList *dl)
   push_scissor(dl, {0, 0, 100000, 100000});
 }
 
-void draw_system_end_frame(DrawList *dl, Gpu::Device *device, Gpu::Pipeline pipeline,
-                           Vec2f canvas_size, u64 frame)
+void draw_system_end_frame(DrawList *dl, Gpu::Device *device,
+                           Gpu::Pipeline pipeline, Vec2f canvas_size, u64 frame)
 {
   if (dl->frame != frame) {
     dl->frame = frame;
@@ -497,7 +505,7 @@ void draw_system_end_frame(DrawList *dl, Gpu::Device *device, Gpu::Pipeline pipe
 
   Gpu::bind_descriptor_set(device, pipeline, dl->desc_set);
   Gpu::upload_buffer_staged(device, dl->index_buffer, dl->verts,
-                       dl->vert_count * sizeof(u32));
+                            dl->vert_count * sizeof(u32));
   Gpu::push_constant(device, pipeline, &canvas_size, sizeof(Vec2f));
 
   for (i32 z = dl->max_z; z >= 0; z--) {
@@ -505,7 +513,7 @@ void draw_system_end_frame(DrawList *dl, Gpu::Device *device, Gpu::Pipeline pipe
       DrawCall call = dl->draw_calls[i];
       if (call.z == z) {
         Gpu::draw_indexed(device, dl->index_buffer, call.vert_offset,
-                     call.tri_count * 3);
+                          call.tri_count * 3);
       }
     }
   }

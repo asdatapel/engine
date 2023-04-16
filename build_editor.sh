@@ -14,7 +14,7 @@ export PATH=$PATH:"/mnt/c/Program Files (x86)/Microsoft Visual Studio/2019/Commu
 
 # ./dui/build.sh
 clang.exe -g -std=c++17 src/editor_main.cpp -o \
-  ./build/editor.exe -D DUI_HOT_RELOAD \
+  ./build/editor.exe \
   -I "./src/" -I "./" -I "./third_party/" -I "./third_party/glm/" \
   -I ./third_party/glfw3.4/include ./third_party/glfw3.4/glfw3dll.lib \
   -I "C:\Users\Asad\VulkanSdk\1.3.231.1\Include" "C:\Users\Asad\VulkanSdk\1.3.231.1\Lib\vulkan-1.lib"  \

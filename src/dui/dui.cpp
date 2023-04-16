@@ -6,6 +6,7 @@
 #include "dui/dui.hpp"
 #include "dui/dui_state.hpp"
 #include "dui/group.hpp"
+#include "dui/interaction.hpp"
 #include "font.hpp"
 #include "gpu/vulkan/framebuffer.hpp"
 #include "input.hpp"
@@ -24,140 +25,6 @@ Color d_light = Color::from_int(0x005b96);  //{0, 0.24706, 0.4902, 1};
 Color l_light = Color::from_int(0x19578a);  //{1, 0.55686, 0, 1};
 Color l       = Color::from_int(0x6497b1);  //{0.99216, 0.46667, 0.00784, 1};
 Color l_dark  = Color::from_int(0x003e71);  //{1, 0.31373, 0.01176, 1};
-
-namespace Dui
-{
-DuiState s;
-
-// when control is not tied to any group or container
-b8 do_hot(DuiId id, Rect rect)
-{
-  b8 is_hot = in_rect(s.input->mouse_pos, rect);
-  if (is_hot)
-    s.set_hot(id);
-  else
-    s.clear_hot(id);
-
-  return is_hot;
-}
-
-// for group controls
-b8 do_hot(DuiId id, Rect rect, Group *root_group)
-{
-  b8 not_blocked_by_container = s.top_container_at_mouse_pos == -1;
-  b8 is_in_top_group          = !s.top_root_group_at_mouse_pos.valid() ||
-                       root_group->id == s.top_root_group_at_mouse_pos;
-
-  b8 is_hot = not_blocked_by_container && is_in_top_group &&
-              in_rect(s.input->mouse_pos, rect);
-  if (is_hot)
-    s.set_hot(id);
-  else
-    s.clear_hot(id);
-
-  return is_hot;
-}
-
-// for widgets inside windows
-b8 do_hot(DuiId id, Rect control_rect, Rect container_rect)
-{
-  b8 is_top_container     = !s.cw || s.cw->id == s.top_container_at_mouse_pos;
-  b8 is_in_container_rect = in_rect(s.input->mouse_pos, container_rect);
-
-  b8 is_hot = is_top_container && is_in_container_rect &&
-              in_rect(s.input->mouse_pos, control_rect);
-  if (is_hot)
-    s.set_hot(id);
-  else
-    s.clear_hot(id);
-
-  return is_hot;
-}
-
-// for widgets inside popups
-b8 do_hot(DuiId id, Rect control_rect, Container *popup)
-{
-  b8 is_top_container     = popup->id == s.top_container_at_mouse_pos;
-  b8 is_in_container_rect = in_rect(s.input->mouse_pos, popup->rect);
-
-  b8 is_hot = is_top_container && is_in_container_rect &&
-              in_rect(s.input->mouse_pos, control_rect);
-  if (is_hot)
-    s.set_hot(id);
-  else
-    s.clear_hot(id);
-
-  return is_hot;
-}
-
-b8 do_active(DuiId id)
-{
-  // TODO handle left and right mouse buttons
-
-  if (s.input->mouse_button_up_events[(i32)MouseButton::LEFT]) {
-    s.clear_active(id);
-  }
-  if (s.input->mouse_button_down_events[(i32)MouseButton::LEFT]) {
-    if (s.just_started_being_active ==
-        -1) {  // only one control should be activated in a frame
-      if (s.is_hot(id)) {
-        s.set_active(id);
-      } else {
-        s.clear_active(id);
-      }
-    }
-  }
-
-  s.was_last_control_active = s.is_active(id);
-  return s.was_last_control_active;
-}
-
-b8 do_selected(DuiId id, b8 on_down = false)
-{
-  b8 clicked = s.just_stopped_being_active == id;
-  if (on_down) {
-    clicked = s.just_started_being_active == id;
-  }
-  if (s.is_hot(id) && clicked && s.just_stopped_being_dragging != id) {
-    s.set_selected(id);
-  } else if (!s.top_container_is_popup &&
-             s.input->mouse_button_down_events[(i32)MouseButton::LEFT] &&
-             s.just_started_being_active != id) {
-    s.clear_selected(id);
-  }
-
-  s.was_last_control_selected = s.is_selected(id);
-  return s.was_last_control_selected;
-}
-
-b8 do_dragging(DuiId id)
-{
-  // TODO handle left and right mouse buttons
-
-  const f32 drag_start_distance = 2.f;
-
-  const b8 active = s.is_active(id);
-  if (active) {
-    if ((s.input->mouse_pos - s.start_position_active).len() >
-        drag_start_distance) {
-      s.set_dragging(id);
-    }
-
-    // prevent dragging off screen by clamping mouse_pos
-    Vec2f clamped_mouse_pos    = clamp_to_rect(s.input->mouse_pos, s.canvas);
-    Vec2f dragging_total_delta = clamped_mouse_pos - s.start_position_active;
-    s.dragging_frame_delta     = dragging_total_delta - s.dragging_total_delta;
-    s.dragging_total_delta     = dragging_total_delta;
-
-  } else {
-    s.clear_dragging(id);
-  }
-
-  s.was_last_control_dragging = s.is_dragging(id);
-  return s.is_dragging(id);
-}
-
-}  // namespace Dui
 
 namespace Dui
 {
@@ -897,6 +764,133 @@ void end_popup()
     s.cc = s.cw;
   }
 }
+
+}  // namespace Dui
+
+namespace Dui
+{
+
+f32 MENU_ITEM_HEIGHT = 24;
+
+b8 menu_item_button(DuiId id, String text)
+{
+  Container *c = get_current_container(&s);
+  if (!c) return false;
+
+  id = extend_hash((DuiId)c, id);
+
+  Rect rect = c->place({0, MENU_ITEM_HEIGHT}, true, true, 0);
+
+  b8 hot     = do_hot(id, rect, c);
+  b8 active  = do_active(id);
+  b8 clicked = hot && s.just_stopped_being_active == id;
+
+  if (hot) {
+    push_rounded_rect(&s.dl, c->z, rect, 4.f, {.5, .5, .5, .5});
+    set_cursor_shape(Platform::CursorShape::POINTING_HAND);
+  }
+
+  if (clicked) {
+    clear_popups();
+  }
+
+  Vec2f text_pos  = {rect.x + WINDOW_MARGIN_SIZE, rect.y + WINDOW_MARGIN_SIZE};
+  f32 text_height = MENU_ITEM_HEIGHT - (WINDOW_MARGIN_SIZE * 2);
+  push_vector_text(&s.dl, c->z, text, text_pos, {1, 1, 1, 1}, text_height);
+
+  return clicked;
+}
+b8 menu_item_button(String text) { return menu_item_button(hash(text), text); }
+
+b8 menu_item_submenu(String text, String submenu_name)
+{
+  Container *c = get_current_container(&s);
+  if (!c) return false;
+
+  DuiId id = extend_hash((DuiId)c, text);
+
+  Rect rect           = c->place({0, MENU_ITEM_HEIGHT}, true, true, 0);
+  Rect highlight_rect = inset(rect, 1.f);
+
+  b8 hot     = do_hot(id, rect, c);
+  b8 active  = do_active(id);
+  b8 clicked = hot && s.just_stopped_being_active == id;
+
+  if (hot) {
+    set_cursor_shape(Platform::CursorShape::POINTING_HAND);
+  }
+
+  if (hot || clicked || is_popup_open(submenu_name)) {
+    push_rounded_rect(&s.dl, c->z, rect, 4.f, {.5, .5, .5, .5});
+  }
+
+  Vec2f text_pos  = {rect.x + WINDOW_MARGIN_SIZE, rect.y + WINDOW_MARGIN_SIZE};
+  f32 text_height = MENU_ITEM_HEIGHT - (WINDOW_MARGIN_SIZE * 2);
+  push_vector_text(&s.dl, c->z, text, text_pos, {1, 1, 1, 1}, text_height);
+
+  Vec2f arrow_pos = {rect.right() - WINDOW_MARGIN_SIZE,
+                     rect.y + WINDOW_MARGIN_SIZE};
+  push_vector_text_justified(&s.dl, c->z, ">", arrow_pos, {1, 1, 1, 1},
+                             text_height, {true, false});
+
+  if (clicked) {
+    open_popup(submenu_name, Vec2f(rect.right(), rect.top()), 200);
+  }
+
+  return start_popup(submenu_name);
+}
+
+void menu_divider()
+{
+  Container *c = get_current_container(&s);
+  if (!c) return;
+
+  c->next_line(0);  // make sure we start below other controls
+  Rect rect = c->place({0, 2.5}, true, true, 0);
+
+  rect.x -= WINDOW_MARGIN_SIZE;
+  rect.width += WINDOW_MARGIN_SIZE * 2;
+
+  push_rounded_rect(&s.dl, c->z, rect, 2, d_light);
+}
+
+// test menubar stuff
+void submenu2(Vec2f pos);
+
+void submenu(Vec2f pos)
+{
+  if (menu_item_submenu("Go to Definition", "submenu2")) {
+    info("submenu2");
+    submenu2({pos.x + 200, pos.y});
+    end_popup();
+  }
+
+  if (menu_item_button("Peek")) {
+    info("submenu2");
+  }
+}
+
+void submenu2(Vec2f pos)
+{
+  if (menu_item_submenu("Cut", "submenu1")) {
+    info("submenu1");
+    submenu({pos.x + 200, pos.y});
+    end_popup();
+  }
+
+  if (menu_item_submenu("Copy", "submenu2")) {
+    info("submenu2");
+    submenu2({pos.x + 200, pos.y});
+    end_popup();
+  }
+
+  menu_divider();
+
+  if (menu_item_button("Paste")) {
+    info("submenu2");
+  }
+}
+
 }  // namespace Dui
 
 namespace Dui
@@ -1453,7 +1447,7 @@ void start_frame_for_group(Group *g)
   }
 }
 
-API void api_start_frame(Input *input, Platform::GlfwWindow *window)
+void start_frame(Input *input, Platform::GlfwWindow *window)
 {
   s.input = input;
 
@@ -1576,56 +1570,56 @@ API void api_start_frame(Input *input, Platform::GlfwWindow *window)
   }
 }
 
-API void api_end_frame(Platform::GlfwWindow *window, Gpu::Device *device,
+void end_frame(Platform::GlfwWindow *window, Gpu::Device *device,
                Gpu::Pipeline pipeline)
 {
-  // if (s.menubar_visible) {
-  //   Rect menubar_rect = {0, 0, s.window_span.x, MENUBAR_HEIGHT};
-  //   push_rect(&s.dl, 0, menubar_rect, d);
+  if (s.menubar_visible) {
+    Rect menubar_rect = {0, 0, s.window_span.x, MENUBAR_HEIGHT};
+    push_rect(&s.dl, 0, menubar_rect, d);
 
-  //   String menuitems[]           = {"File", "Edit", "View", "Window"};
-  //   f32 next_menubar_item_offset = MENUBAR_MARGIN;
-  //   for (i32 i = 0; i < 4; i++) {
-  //     DuiId menubar_item_id = hash("MenubarItem", menuitems[i]);
+    String menuitems[]           = {"File", "Edit", "View", "Window"};
+    f32 next_menubar_item_offset = MENUBAR_MARGIN;
+    for (i32 i = 0; i < 4; i++) {
+      DuiId menubar_item_id = hash("MenubarItem", menuitems[i]);
 
-  //     Rect menubar_item_rect = {
-  //         next_menubar_item_offset - MENUBAR_MARGIN, MENUBAR_MARGIN,
-  //         s.dl.vfont.get_text_width(menuitems[i], MENUBAR_FONT_SIZE) +
-  //             MENUBAR_MARGIN * 2,
-  //         MENUBAR_FONT_SIZE};
+      Rect menubar_item_rect = {
+          next_menubar_item_offset - MENUBAR_MARGIN, MENUBAR_MARGIN,
+          s.dl.vfont.get_text_width(menuitems[i], MENUBAR_FONT_SIZE) +
+              MENUBAR_MARGIN * 2,
+          MENUBAR_FONT_SIZE};
 
-  //     b8 hot     = do_hot(menubar_item_id, menubar_item_rect);
-  //     b8 active  = do_active(menubar_item_id);
-  //     b8 clicked = hot && s.just_stopped_being_active == menubar_item_id;
+      b8 hot     = do_hot(menubar_item_id, menubar_item_rect);
+      b8 active  = do_active(menubar_item_id);
+      b8 clicked = hot && s.just_stopped_being_active == menubar_item_id;
 
-  //     if (clicked) {
-  //       open_popup(menuitems[i], {menubar_item_rect.x, MENUBAR_HEIGHT}, 200);
-  //     }
+      if (clicked) {
+        open_popup(menuitems[i], {menubar_item_rect.x, MENUBAR_HEIGHT}, 200);
+      }
 
-  //     if (start_popup(menuitems[i])) {
-  //       submenu({menubar_item_rect.x + 200, MENUBAR_HEIGHT});
-  //       end_popup();
-  //     }
+      if (start_popup(menuitems[i])) {
+        submenu({menubar_item_rect.x + 200, MENUBAR_HEIGHT});
+        end_popup();
+      }
 
-  //     if (hot) {
-  //       push_rounded_rect(&s.dl, 0, menubar_item_rect, 4, {.7, .7, .7, .5});
-  //     }
-  //     push_vector_text(&s.dl, 0, menuitems[i],
-  //                      {next_menubar_item_offset, MENUBAR_MARGIN}, {1, 1, 1, 1},
-  //                      MENUBAR_FONT_SIZE);
+      if (hot) {
+        push_rounded_rect(&s.dl, 0, menubar_item_rect, 4, {.7, .7, .7, .5});
+      }
+      push_vector_text(&s.dl, 0, menuitems[i],
+                       {next_menubar_item_offset, MENUBAR_MARGIN}, {1, 1, 1, 1},
+                       MENUBAR_FONT_SIZE);
 
-  //     next_menubar_item_offset +=
-  //         s.dl.vfont.get_text_width(menuitems[i], MENUBAR_FONT_SIZE) +
-  //         MENUBAR_MARGIN * 2;
-  //   }
-  // }
+      next_menubar_item_offset +=
+          s.dl.vfont.get_text_width(menuitems[i], MENUBAR_FONT_SIZE) +
+          MENUBAR_MARGIN * 2;
+    }
+  }
 
   draw_system_end_frame(&s.dl, device, pipeline, s.window_span, s.frame);
 
   window->set_cursor_shape(s.cursor_shape);
 }
 
-API DuiId api_start_window(String name, Rect initial_rect)
+DuiId start_window(String name, Rect initial_rect)
 {
   DuiId id = hash(name);
 
@@ -1650,7 +1644,7 @@ API DuiId api_start_window(String name, Rect initial_rect)
   return id;
 }
 
-API void api_end_window()
+void end_window()
 {
   if (s.cc) {
     s.cc->end_frame(&s);
@@ -1668,95 +1662,6 @@ API void api_end_window()
 namespace Dui
 {
 
-f32 MENU_ITEM_HEIGHT = 24;
-
-b8 menu_item_button(DuiId id, String text)
-{
-  Container *c = get_current_container(&s);
-  if (!c) return false;
-
-  id = extend_hash((DuiId)c, id);
-
-  Rect rect = c->place({0, MENU_ITEM_HEIGHT}, true, true, 0);
-
-  b8 hot     = do_hot(id, rect, c);
-  b8 active  = do_active(id);
-  b8 clicked = hot && s.just_stopped_being_active == id;
-
-  if (hot) {
-    push_rounded_rect(&s.dl, c->z, rect, 4.f, {.5, .5, .5, .5});
-    set_cursor_shape(Platform::CursorShape::POINTING_HAND);
-  }
-
-  if (clicked) {
-    clear_popups();
-  }
-
-  Vec2f text_pos  = {rect.x + WINDOW_MARGIN_SIZE, rect.y + WINDOW_MARGIN_SIZE};
-  f32 text_height = MENU_ITEM_HEIGHT - (WINDOW_MARGIN_SIZE * 2);
-  push_vector_text(&s.dl, c->z, text, text_pos, {1, 1, 1, 1}, text_height);
-
-  return clicked;
-}
-b8 menu_item_button(String text) { return menu_item_button(hash(text), text); }
-
-b8 menu_item_submenu(String text, String submenu_name)
-{
-  Container *c = get_current_container(&s);
-  if (!c) return false;
-
-  DuiId id = extend_hash((DuiId)c, text);
-
-  Rect rect           = c->place({0, MENU_ITEM_HEIGHT}, true, true, 0);
-  Rect highlight_rect = inset(rect, 1.f);
-
-  b8 hot     = do_hot(id, rect, c);
-  b8 active  = do_active(id);
-  b8 clicked = hot && s.just_stopped_being_active == id;
-
-  if (hot) {
-    set_cursor_shape(Platform::CursorShape::POINTING_HAND);
-  }
-
-  if (hot || clicked || is_popup_open(submenu_name)) {
-    push_rounded_rect(&s.dl, c->z, rect, 4.f, {.5, .5, .5, .5});
-  }
-
-  Vec2f text_pos  = {rect.x + WINDOW_MARGIN_SIZE, rect.y + WINDOW_MARGIN_SIZE};
-  f32 text_height = MENU_ITEM_HEIGHT - (WINDOW_MARGIN_SIZE * 2);
-  push_vector_text(&s.dl, c->z, text, text_pos, {1, 1, 1, 1}, text_height);
-
-  Vec2f arrow_pos = {rect.right() - WINDOW_MARGIN_SIZE,
-                     rect.y + WINDOW_MARGIN_SIZE};
-  push_vector_text_justified(&s.dl, c->z, ">", arrow_pos, {1, 1, 1, 1},
-                             text_height, {true, false});
-
-  if (clicked) {
-    open_popup(submenu_name, Vec2f(rect.right(), rect.top()), 200);
-  }
-
-  return start_popup(submenu_name);
-}
-
-void menu_divider()
-{
-  Container *c = get_current_container(&s);
-  if (!c) return;
-
-  c->next_line(0);  // make sure we start below other controls
-  Rect rect = c->place({0, 2.5}, true, true, 0);
-
-  rect.x -= WINDOW_MARGIN_SIZE;
-  rect.width += WINDOW_MARGIN_SIZE * 2;
-
-  push_rounded_rect(&s.dl, c->z, rect, 2, d_light);
-}
-
-}  // namespace Dui
-
-namespace Dui
-{
-
 void set_window_color(Color color)
 {
   Container *c = get_current_container(&s);
@@ -1765,7 +1670,7 @@ void set_window_color(Color color)
   }
 }
 
-API void api_next_line()
+void next_line()
 {
   Container *c = get_current_container(&s);
   if (!c) return;
@@ -1773,7 +1678,7 @@ API void api_next_line()
   c->next_line();
 }
 
-API b8 api_button(String text, Vec2f size, Color color, b8 fill)
+b8 button(String text, Vec2f size, Color color, b8 fill)
 {
   Container *c = get_current_container(&s);
   if (!c) return false;
@@ -1813,7 +1718,7 @@ API b8 api_button(String text, Vec2f size, Color color, b8 fill)
   return clicked;
 }
 
-API void api_texture(Vec2f size, u32 texture_id)
+void texture(Vec2f size, u32 texture_id)
 {
   Container *c = get_current_container(&s);
   if (!c) return;
@@ -2137,7 +2042,7 @@ b8 directory_item(DuiId id, String text, b8 expandable, b8 selected = false)
   return open;
 }
 
-API void api_init_dui(Gpu::Device *device, Gpu::Pipeline pipeline)
+void init_dui(Gpu::Device *device, Gpu::Pipeline pipeline)
 {
   init_draw_system(&s.dl, device, pipeline);
 
@@ -2147,7 +2052,7 @@ API void api_init_dui(Gpu::Device *device, Gpu::Pipeline pipeline)
 
 void asset_browser()
 {
-  api_start_window("Asset Browser", {100, 100, 900, 500});
+  start_window("Asset Browser", {100, 100, 900, 500});
 
   start_list();
 
@@ -2222,147 +2127,20 @@ void asset_browser()
 
   end_list();
 
-  api_end_window();
+  end_window();
 }
 
-// test menubar stuff
-void submenu2(Vec2f pos);
+}  // namespace Dui
 
-void submenu(Vec2f pos)
+namespace Dui
 {
-  if (menu_item_submenu("Go to Definition", "submenu2")) {
-    info("submenu2");
-    submenu2({pos.x + 200, pos.y});
-    end_popup();
-  }
-
-  if (menu_item_button("Peek")) {
-    info("submenu2");
-  }
+b8 clicked(DuiId id)
+{
+  Container *c = get_current_container(&s);
+  if (!c) return false;
+  id = extend_hash((DuiId)c, id);
+  return s.hot == id && s.just_started_being_active == id;
 }
-
-void submenu2(Vec2f pos)
-{
-  if (menu_item_submenu("Cut", "submenu1")) {
-    info("submenu1");
-    submenu({pos.x + 200, pos.y});
-    end_popup();
-  }
-
-  if (menu_item_submenu("Copy", "submenu2")) {
-    info("submenu2");
-    submenu2({pos.x + 200, pos.y});
-    end_popup();
-  }
-
-  menu_divider();
-
-  if (menu_item_button("Paste")) {
-    info("submenu2");
-  }
-}
-
-API void api_debug_ui_test(Gpu::Device *device, Gpu::Pipeline pipeline,
-                           Input *input, Platform::GlfwWindow *window,
-                           Gpu::Framebuffer framebuffer)
-{
-  api_start_frame(input, window);
-
-  DuiId w1 =
-      api_start_window("Properties: tm_checkboard_tab", {100, 200, 300, 300});
-  set_window_color({0, 0.13725, 0.27843, 1});
-  api_end_window();
-
-  DuiId w2 = api_start_window("A really long window title", {200, 300, 100, 300});
-  set_window_color({0, 0.2, 0.4, .5});
-  api_end_window();
-
-  DuiId w3 = api_start_window("third", {300, 400, 200, 300});
-  set_window_color({0, 0.24706, 0.4902, .5});
-  api_end_window();
-
-  DuiId w4 = api_start_window("fourth", {400, 500, 200, 300});
-  set_window_color({1, 0.55686, 0, .5});
-  api_end_window();
-
-  DuiId w5 = api_start_window("fifth", {500, 600, 200, 300});
-  set_window_color({0.99216, 0.46667, 0.00784, .5});
-  if (api_button("test21", {200, 300}, {1, 1, 1, 0})) info("test1");
-  if (api_button("test2", {150, 100}, {1, 0, 0, 1})) info("test2");
-  if (api_button("test3", {100, 400}, {1, 1, 0, 1}, true)) info("test3");
-  api_next_line();
-  if (api_button("test4", {200, 600}, {0, 1, 1, 1})) info("test4");
-  api_next_line();
-  if (api_button("test5", {200, 700}, {1, 0, 1, 1})) info("test5");
-  if (api_button("test6", {200, 300}, {1, 1, 0, 1})) info("test6");
-  api_next_line();
-  if (api_button("test7", {200, 100}, {0, 0, 1, 1})) info("test7");
-  api_end_window();
-
-  DuiId w6 = api_start_window("sizth", {600, 700, 200, 300});
-
-  static StaticString<68> test_text_input = "Tesssting...";
-  text_input(&test_text_input);
-
-  static StaticString<128> test_text_input2 = "Asdfing!";
-  text_input(&test_text_input2);
-
-  if (api_button("test8", {200, 30}, l_dark, true)) info("test8");
-  if (api_button("test9", {200, 30}, l_dark, true)) info("test9");
-  set_window_color({1, 0.31373, 0.01176, .5});
-  api_end_window();
-
-  DuiId w7 = api_start_window("aseventh", {700, 800, 200, 300});
-  set_window_color({.3, .6, .4, .5});
-  api_end_window();
-
-  DuiId w8 = api_start_window("_", {100, 100, 800, 800});
-  static VkSampler sampler;
-  static u32 texture_id = -1;
-
-  static b8 tex_init = false;
-  f32 size           = 512;
-  if (!tex_init) {
-    tex_init = true;
-    sampler  = create_sampler(device, false, false);
-    texture_id =
-        push_texture(device, &s.dl, framebuffer.color_image_view, sampler);
-  }
-  api_texture({size, size}, texture_id);
-
-  api_end_window();
-
-  asset_browser();
-
-  api_end_frame(window, device, pipeline);
-}
-
-API DuiState *api_get_dui_state() { return &s; }
-
-API ReloadData api_get_plugin_reload_data() { return {&s}; }
-API void api_reload_plugin(ReloadData reload_data)
-{
-  {
-    Container *c = &s.containers.wrapped_get(hash("fourth"));
-    Group *g     = c->parent.get();
-    info(
-        "before "
-        "api_get_plugiapi_reload_pluginn_reload_data: ",
-        c->rect.x, ", ", c->rect.y);
-  }
-
-  s = *reload_data.dui_state;
-
-  {
-    Container *c = &s.containers.wrapped_get(hash("fourth"));
-    Group *g     = c->parent.get();
-    info(
-        "after "
-        "api_get_plugiapi_reload_pluginn_reload_data: ",
-        c->rect.x, ", ", c->rect.y);
-  }
-};
-
 }  // namespace Dui
 
 /*

@@ -75,7 +75,7 @@ enum struct Keys {
   COUNT
 };
 
-enum struct MouseButton { LEFT, RIGHT, COUNT };
+enum struct MouseButton { LEFT, RIGHT, MIDDLE, COUNT };
 
 struct Input {
   bool keys[(int)Keys::COUNT]            = {};

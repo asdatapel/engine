@@ -381,6 +381,9 @@ void mouse_button_callback(GLFWwindow *window, i32 button, i32 action, i32 mods)
     case (GLFW_MOUSE_BUTTON_RIGHT): {
       mouse_button = MouseButton::RIGHT;
     } break;
+    case (GLFW_MOUSE_BUTTON_MIDDLE): {
+      mouse_button = MouseButton::MIDDLE;
+    } break;
     default:
       return;
   }

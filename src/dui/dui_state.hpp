@@ -36,8 +36,8 @@ struct DuiState {
   Container *cc = nullptr;
 
   Array<Popup, 256> popups;
-  i32 started_popups_count = 0;
-  b8 clear_popups          = false;
+  i32 started_popups_count  = 0;
+  b8 clear_popups           = false;
   DuiId previously_selected = -1;
 
   Input *input = nullptr;
@@ -48,7 +48,7 @@ struct DuiState {
 
   GroupId top_root_group_at_mouse_pos = -1;
   DuiId top_container_at_mouse_pos    = -1;
-  b8 top_container_is_popup = false;
+  b8 top_container_is_popup           = false;
 
   b8 menubar_visible = true;
 
@@ -79,4 +79,6 @@ struct DuiState {
   };
   SnapGroupArgs snap_group_to_snap;
 };
+
+DuiState s;
 }  // namespace Dui

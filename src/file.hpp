@@ -20,7 +20,8 @@ File read_file(String path, Allocator *allocator)
   memcpy(null_terminated_path.data, path.data, path.size);
   null_terminated_path.data[path.size] = '\0';
 
-  std::ifstream in_stream((char *)null_terminated_path.data, std::ios::binary | std::ios::ate);
+  std::ifstream in_stream((char *)null_terminated_path.data,
+                          std::ios::binary | std::ios::ate);
   u64 file_size = in_stream.tellg();
 
   File file;
@@ -39,3 +40,17 @@ File read_file(String path, Allocator *allocator)
 
   return file;
 }
+
+void write_file(NullTerminatedString path, String file, b8 overwrite = false)
+{
+  std::ios_base::openmode file_flags = std::ios::out | std::ios::binary;
+  if (overwrite)
+    file_flags |= std::ios::trunc;
+  else
+    file_flags |= std::ios::ate;
+
+  std::fstream out_stream((char *)path.data, file_flags);
+  out_stream.write((char *)file.data, file.size);
+  out_stream.close();
+}
+
