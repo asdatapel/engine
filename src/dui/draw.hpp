@@ -23,6 +23,7 @@ enum struct PrimitiveIds : u32 {
   TEXTURE_RECT = 3 << 18,
   BITMAP_GLYPH = 4 << 18,
   VECTOR_GLYPH = 5 << 18,
+  LINE         = 6 << 18,
 };
 
 struct RectPrimitive {
@@ -66,6 +67,14 @@ struct VectorGlyphPrimitive {
   u32 clip_rect_idx;
 };
 
+struct LinePrimitive {
+  Vec2f a;
+  Vec2f b;
+  u32 color;
+  u32 clip_rect_idx;
+  Vec2f pad;
+};
+
 struct Primitives {
   RectPrimitive clip_rects[1024];
   RoundedRectPrimitive rounded_rects[1024];
@@ -73,6 +82,7 @@ struct Primitives {
   TextureRectPrimitive texture_rects[1024];
   VectorGlyphPrimitive vector_glyphs[1024];
   ConicCurvePrimitive conic_curves[4096];
+  LinePrimitive lines[4096];
 };
 
 struct DrawCall {
@@ -81,6 +91,11 @@ struct DrawCall {
 
   i32 z;
 };
+
+struct DrawSettings {
+  b8 force_scissor = false;
+  u32 scissor_idx = 0;
+}; 
 
 struct DrawList {
   u64 frame = 0;
@@ -105,9 +120,12 @@ struct DrawList {
   i32 bitmap_glyphs_count = 0;
   i32 conic_curves_count  = 0;
   i32 vector_glyphs_count = 0;
+  i32 lines_count         = 0;
 
   StaticStack<Rect, 1024> scissors;
   StaticStack<u32, 1024> scissor_idxs;
+
+  StaticStack<DrawSettings, 32> settings;
 
   u32 *verts     = nullptr;
   i32 vert_count = 0;
@@ -117,7 +135,26 @@ struct DrawList {
   i32 max_z = 0;
 };
 
-RectPrimitive *push_scissor(DrawList *dl, Rect rect)
+void push_draw_settings(DrawList *dl, DrawSettings ds) {
+  dl->settings.push_back(ds);
+}
+void pop_draw_settings(DrawList *dl) {
+  dl->settings.pop();
+}
+
+u32 get_current_scissor_idx(DrawList *dl) {
+  if (dl->settings.size > 0 && dl->settings.top().force_scissor) {
+    return dl->settings.top().scissor_idx;
+  }
+  return dl->scissor_idxs.top(); 
+}
+Rect get_current_scissor(DrawList *dl) {
+  if (dl->settings.size > 0 && dl->settings.top().force_scissor) {
+    return dl->primitives.clip_rects[dl->settings.top().scissor_idx].rect;
+  }
+  return dl->scissors.top(); 
+}
+u32 push_scissor(DrawList *dl, Rect rect)
 {
   auto to_bounds = [](Rect r) {
     return Vec4f{r.x, r.y, r.x + r.width, r.y + r.height};
@@ -139,7 +176,7 @@ RectPrimitive *push_scissor(DrawList *dl, Rect rect)
   dl->scissor_idxs.push_back(dl->clip_rects_count - 1);
   dl->scissors.push_back(rect);
 
-  return &dl->primitives.clip_rects[dl->clip_rects_count - 1];
+  return dl->clip_rects_count - 1;
 }
 void pop_scissor(DrawList *dl)
 {
@@ -188,7 +225,7 @@ u32 push_primitive_rounded_rect(DrawList *dl, Rect rect, Color color,
                                 f32 corner_radius, u32 corner_mask)
 {
   dl->primitives.rounded_rects[dl->rounded_rects_count++] = {
-      rect, dl->scissor_idxs.top(), color_to_int(color), corner_radius,
+      rect, get_current_scissor_idx(dl), color_to_int(color), corner_radius,
       corner_mask};
 
   return dl->rounded_rects_count - 1;
@@ -203,7 +240,7 @@ RoundedRectPrimitive *push_rounded_rect(DrawList *dl, i32 z, Rect rect,
                                    CORNERS[corner] | primitive_index};
   };
 
-  if (!overlaps(rect, dl->scissors.top())) {
+  if (!overlaps(rect, get_current_scissor(dl))) {
     return nullptr;
   }
 
@@ -231,7 +268,7 @@ u32 push_primitive_bitmap_glyph(DrawList *dl, Rect rect, Vec4f uv_bounds,
                                 Color color)
 {
   dl->primitives.bitmap_glyphs[dl->bitmap_glyphs_count++] = {
-      rect, uv_bounds, dl->scissor_idxs.top(), color_to_int(color)};
+      rect, uv_bounds, get_current_scissor_idx(dl), color_to_int(color)};
 
   return dl->bitmap_glyphs_count - 1;
 }
@@ -244,7 +281,7 @@ void push_bitmap_glyph(DrawList *dl, i32 z, Rect rect, Vec4f uv_bounds,
                                    CORNERS[corner] | primitive_index};
   };
 
-  if (!overlaps(rect, dl->scissors.top())) {
+  if (!overlaps(rect, get_current_scissor(dl))) {
     return;
   }
 
@@ -300,7 +337,7 @@ u32 push_primitive_vector_glyph(DrawList *dl, Rect rect, Glyph glyph,
 {
   dl->primitives.vector_glyphs[dl->vector_glyphs_count++] = {
       rect, glyph.curve_start_idx, glyph.curve_count, color_to_int(color),
-      dl->scissor_idxs.top()};
+      get_current_scissor_idx(dl)};
 
   return dl->vector_glyphs_count - 1;
 }
@@ -312,7 +349,7 @@ void push_vector_glyph(DrawList *dl, i32 z, Rect rect, Glyph glyph, Color color)
                                    CORNERS[corner] | primitive_index};
   };
 
-  if (!overlaps(rect, dl->scissors.top())) {
+  if (!overlaps(rect, get_current_scissor(dl))) {
     return;
   }
 
@@ -423,7 +460,7 @@ void push_texture_rect(DrawList *dl, i32 z, Rect rect, Vec4f uv_bounds,
   auto push_primitive_texture_rect = [](DrawList *dl, Rect rect,
                                         Vec4f uv_bounds, u32 texture_id) {
     dl->primitives.texture_rects[dl->texture_rects_count++] = {
-        rect, uv_bounds, texture_id, dl->scissor_idxs.top()};
+        rect, uv_bounds, texture_id, get_current_scissor_idx(dl)};
 
     return dl->texture_rects_count - 1;
   };
@@ -433,7 +470,7 @@ void push_texture_rect(DrawList *dl, i32 z, Rect rect, Vec4f uv_bounds,
                                    CORNERS[corner] | primitive_index};
   };
 
-  if (!overlaps(rect, dl->scissors.top())) {
+  if (!overlaps(rect, get_current_scissor(dl))) {
     return;
   }
 
@@ -448,6 +485,64 @@ void push_texture_rect(DrawList *dl, i32 z, Rect rect, Vec4f uv_bounds,
   push_texture_rect_vert(dl, primitive_idx, 2);
 
   push_draw_call(dl, 2, z);
+}
+
+u32 push_primitive_line(DrawList *dl, Vec2f a, Vec2f b, Color color)
+{
+  dl->primitives.lines[dl->lines_count++] = {a, b, color_to_int(color),
+                                             get_current_scissor_idx(dl)};
+
+  return dl->lines_count - 1;
+}
+
+void push_line(DrawList *dl, i32 z, Vec2f a, Vec2f b, Color color)
+{
+  auto push_vert = [](DrawList *dl, u32 primitive_index, u8 corner) {
+    dl->verts[dl->vert_count++] = {(u32)PrimitiveIds::LINE | CORNERS[corner] |
+                                   primitive_index};
+  };
+
+  Vec2f mins        = min(a, b);
+  Vec2f maxs        = max(a, b);
+  Rect bounding_box = {mins.x, mins.y, maxs.x - mins.x, maxs.y - mins.y};
+  if (!overlaps(bounding_box, get_current_scissor(dl))) {
+    return;
+  }
+
+  u32 primitive_idx = push_primitive_line(dl, a, b, color);
+
+  push_vert(dl, primitive_idx, 0);
+  push_vert(dl, primitive_idx, 1);
+  push_vert(dl, primitive_idx, 2);
+  push_vert(dl, primitive_idx, 1);
+  push_vert(dl, primitive_idx, 3);
+  push_vert(dl, primitive_idx, 2);
+
+  push_draw_call(dl, 2, z);
+}
+
+void push_cubic_spline(DrawList *dl, i32 z, Vec2f p[4], Color color,
+                       i32 n_segments)
+{
+  auto evaluate_spline = [&](f32 t) {
+    f32 t2 = t * t;
+    f32 t3 = t2 * t;
+    Vec2f a = (-p[0] + 3 * p[1] - 3 * p[2] + p[3]) * t3;
+    Vec2f b = (3 * p[0] - 6 * p[1] + 3 * p[2]) * t2;
+    Vec2f c = (-3 * p[0] + 3 * p[1]) * t;
+    Vec2f d = p[0];
+
+    return a + b + c + d;
+  };
+
+  for (i32 i = 0; i < n_segments; i++) {
+    f32 t0  = (f32)i / n_segments;
+    f32 t1  = (f32)(i + 1) / n_segments;
+    Vec2f start = evaluate_spline(t0);
+    Vec2f end = evaluate_spline(t1);
+
+    push_line(dl, z, start, end, color);
+  }
 }
 
 void init_draw_system(DrawList *dl, Gpu::Device *device, Gpu::Pipeline pipeline)
@@ -487,6 +582,7 @@ void draw_system_start_frame(DrawList *dl)
   dl->texture_rects_count = 0;
   dl->bitmap_glyphs_count = 0;
   dl->vector_glyphs_count = 0;
+  dl->lines_count         = 0;
 
   dl->scissor_idxs.clear();
   dl->scissors.clear();

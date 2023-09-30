@@ -33,21 +33,21 @@ b8 do_hot(DuiId id, Rect rect, Group *root_group)
   return is_hot;
 }
 
-// for widgets inside windows
-b8 do_hot(DuiId id, Rect control_rect, Rect container_rect, b8 mask = true)
-{
-  b8 is_top_container     = !s.cw || s.cw->id == s.top_container_at_mouse_pos;
-  b8 is_in_container_rect = in_rect(s.input->mouse_pos, container_rect);
+// // for widgets inside windows
+// b8 do_hot(DuiId id, Rect control_rect, Rect container_rect)
+// {
+//   b8 is_top_container     = !s.cw || s.cw->id == s.top_container_at_mouse_pos;
+//   b8 is_in_container_rect = in_rect(s.input->mouse_pos, container_rect);
 
-  b8 is_hot = is_top_container && is_in_container_rect &&
-              in_rect(s.input->mouse_pos, control_rect) && mask;
-  if (is_hot)
-    s.set_hot(id);
-  else
-    s.clear_hot(id);
+//   b8 is_hot = is_top_container && is_in_container_rect &&
+//               in_rect(s.input->mouse_pos, control_rect);
+//   if (is_hot)
+//     s.set_hot(id);
+//   else
+//     s.clear_hot(id);
 
-  return is_hot;
-}
+//   return is_hot;
+// }
 
 // for widgets inside popups
 b8 do_hot(DuiId id, Rect control_rect, Container *popup)

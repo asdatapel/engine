@@ -128,6 +128,25 @@ void main() {
         out_color = uint_to_vec_color(p.color);
         out_position = verts[corner];
         out_clip_rect_bounds = vec4(clip.rect.x, clip.rect.y, clip.rect.x + clip.rect.z, clip.rect.y + clip.rect.w);
+    } else if (out_primitive_type == LINE) {
+        LinePrimitive p = primitives.lines[primitive_idx];
+        RectPrimitive clip = primitives.clip_rects[p.clip_rect_idx];
+
+        vec2 d = normalize(p.b - p.a);
+        vec2 tangent = vec2(-d.y, d.x) * 10;
+
+        uint corner = (gl_VertexIndex >> 16) & 0x3;
+        vec2 verts[] = {
+            p.a + tangent,
+            p.a - tangent,
+            p.b + tangent,
+            p.b - tangent,
+        };
+        gl_Position = vec4(verts[corner] / push_constants.canvas_size * vec2(2, 2) - vec2(1, 1), 0, 1);
+
+        out_color = uint_to_vec_color(p.color);
+        out_position = verts[corner];
+        out_clip_rect_bounds = vec4(clip.rect.x, clip.rect.y, clip.rect.x + clip.rect.z, clip.rect.y + clip.rect.w);
     }
 }
 

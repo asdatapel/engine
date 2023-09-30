@@ -18,11 +18,13 @@ struct Container {
   GroupId parent = -1;
   i32 z          = -1;
 
-  Vec2f scroll_offset_target = {0, 0};
-  Vec2f scroll_offset        = {0, 0};
-
   Rect rect;
   Color color;
+  b8 hot_mask  = true;
+  f32 line_gap = DEFAULT_LINE_GAP;
+
+  Vec2f scroll_offset_target = {0, 0};
+  Vec2f scroll_offset        = {0, 0};
 
   Rect content_rect;
   Vec2f cursor = {0, 0};
@@ -37,6 +39,8 @@ struct Container {
   // determine free space and stretch controls to bounds.
   Vec2f last_frame_minimum_content_span    = {0, 0};
   Vec2f current_frame_minimum_content_span = {0, 0};
+
+  u32 draw_scissor_idx = 0;
 
   Rect get_content_rect()
   {
@@ -62,10 +66,10 @@ struct Container {
   void start_frame(DuiState *s, b8 is_popup = false);
   void end_frame(DuiState *s, b8 is_popup = false);
 
+  void fit_rect_to_content();
   void expand_rect_to_content();
 
-  Rect place(Vec2f size, b8 commit = true, b8 fill = false,
-             f32 line_gap = DEFAULT_LINE_GAP)
+  Rect place(Vec2f size, b8 commit = true, b8 fill = false)
   {
     Vec2f scrolled_cursor = cursor + scroll_offset;
 
@@ -88,7 +92,7 @@ struct Container {
       cursor.x += actual_size.x;
     }
 
-    if (fill) next_line(line_gap);
+    if (fill && commit) next_line();
 
     return {
         content_rect.x + scrolled_cursor.x,
@@ -105,12 +109,14 @@ struct Container {
             content_rect.height - next_line_y};
   }
 
-  void next_line(f32 gap = DEFAULT_LINE_GAP)
+  void next_line()
   {
-    cursor.y += cursor_size + gap;
+    cursor.y += cursor_size + line_gap;
     cursor.x    = 0;
     cursor_size = 0;
   }
+
+  b8 do_hot(DuiState *s, DuiId id, Rect control_rect);
 
   // stretch + minimum size (causing scroll)
   // shrink + minimum size (causing scroll) + maximum size

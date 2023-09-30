@@ -2,6 +2,7 @@
 
 #include "containers/array.hpp"
 #include "containers/static_pool.hpp"
+#include "containers/static_stack.hpp"
 #include "dui/basic.hpp"
 #include "dui/container.hpp"
 #include "dui/group.hpp"
@@ -33,7 +34,7 @@ struct DuiState {
   // pointers because they don't persist between frames
   Group *cg     = nullptr;
   Container *cw = nullptr;
-  Container *cc = nullptr;
+  StaticStack<Container*, 256> cc;
 
   Array<Popup, 256> popups;
   i32 started_popups_count  = 0;

@@ -19,11 +19,7 @@ void Container::start_frame(DuiState *s, b8 is_popup)
 
   content_rect = get_content_rect();
 
-  s->cc = this;
-
-  if (!is_popup) {
-    push_rect(&s->dl, z, rect, d_dark);
-  }
+  s->cc.push_back(this);
 
   {
     b8 has_scrollwheel_focus =
@@ -54,7 +50,7 @@ void Container::start_frame(DuiState *s, b8 is_popup)
                content_rect.y + scrollbar_y, SCROLLBAR_SIZE, scrollbar_height};
 
       DuiId vertical_scrollbar_id = extend_hash(id, "vertical_scrollbar");
-      b8 hot      = do_hot(vertical_scrollbar_id, scrollbar_area_rect, rect);
+      b8 hot      = do_hot(s, vertical_scrollbar_id, scrollbar_area_rect);
       b8 active   = do_active(vertical_scrollbar_id);
       b8 dragging = do_dragging(vertical_scrollbar_id);
       if (hot) {
@@ -112,7 +108,7 @@ void Container::start_frame(DuiState *s, b8 is_popup)
                scrollbar_width, SCROLLBAR_SIZE};
 
       DuiId horizontal_scrollbar_id = extend_hash(id, "horizontal_scrollbar");
-      b8 hot      = do_hot(horizontal_scrollbar_id, scrollbar_area_rect, rect);
+      b8 hot      = do_hot(s, horizontal_scrollbar_id, scrollbar_area_rect);
       b8 active   = do_active(horizontal_scrollbar_id);
       b8 dragging = do_dragging(horizontal_scrollbar_id);
       if (hot) {
@@ -158,7 +154,7 @@ void Container::start_frame(DuiState *s, b8 is_popup)
   }
 
   if (!is_popup) {
-    push_scissor(&s->dl, content_rect);
+    draw_scissor_idx = push_scissor(&s->dl, content_rect);
   }
 }
 
@@ -168,7 +164,13 @@ void Container::end_frame(DuiState *s, b8 is_popup)
     pop_scissor(&s->dl);
   }
 
-  s->cc = nullptr;
+  s->cc.pop();
+}
+
+void Container::fit_rect_to_content()
+{
+  rect.width  = current_frame_minimum_content_span.x + (WINDOW_MARGIN_SIZE * 2);
+  rect.height = current_frame_minimum_content_span.y + (WINDOW_MARGIN_SIZE * 2);
 }
 
 void Container::expand_rect_to_content()
@@ -183,12 +185,27 @@ Container *get_container(DuiId id) { return &s.containers.wrapped_get(id); }
 
 Container *get_current_container(DuiState *s)
 {
-  Container *cc = s->cc;
-  if (!cc) return nullptr;
+  if (s->cc.size == 0) return nullptr;
+  Container *cc = s->cc.top();
   if (cc->parent.valid() &&
       cc->parent.get()->windows[cc->parent.get()->active_window_idx] != cc->id)
     return nullptr;
 
   return cc;
+}
+
+b8 Container::do_hot(DuiState *s, DuiId id, Rect control_rect)
+{
+  b8 is_top_window = !s->cw || s->cw->id == s->top_container_at_mouse_pos;
+  b8 is_in_container_rect = in_rect(s->input->mouse_pos, content_rect);
+
+  b8 is_hot = is_top_window && is_in_container_rect &&
+              in_rect(s->input->mouse_pos, control_rect) && hot_mask;
+  if (is_hot)
+    s->set_hot(id);
+  else
+    s->clear_hot(id);
+
+  return is_hot;
 }
 }  // namespace Dui

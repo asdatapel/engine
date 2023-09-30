@@ -133,5 +133,19 @@ void main() {
       }
       out_color = vec4(in_color.rgb, in_color.a * coverage);
       out_color.a *= clip(in_position, in_clip_rect_bounds);
+    } else if (in_primitive_type == LINE) {
+      LinePrimitive line = primitives.lines[in_primitive_idx];
+
+      // ACK: https://iquilezles.org/articles/distfunctions2d/
+      vec2 pa    = in_position - line.a;
+      vec2 ba    = line.b - line.a;
+      float h    = clamp(dot(pa, ba) / dot(ba, ba), 0, 1);
+      float dist = length(pa - h * ba);
+
+      float aa = smoothstep(0, 2, dist);
+      out_color = in_color;
+      out_color.a = (1 - aa) * out_color.a;
+
+      out_color.a *= clip(in_position, in_clip_rect_bounds);
     }
 }

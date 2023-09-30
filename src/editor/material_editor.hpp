@@ -402,7 +402,7 @@ GeneratedShader material_nodes_test(String graph, ShaderModel shader_model,
 //   String graph =
 //       "time = input(per_frame_data.time, 1)"
 //       "uv = input(in_uv, 2)"
-//       "uv2 = add(time, uv)"
+//       "uv2 = add(time, uv)"0
 //       "diffuse = "
 //       "texture(\"../fracas/set/models/pedestal/Pedestal_Albedo.png\", "
 //       "4, uv2)"
@@ -443,6 +443,114 @@ GeneratedShader material_nodes_test(String graph, ShaderModel shader_model,
 // }
 
 // ShaderNodeDefinition dumb = {{{"namme"}, {"other name"}}};
+
+// struct InputNode : Node {
+//   String input_name;
+// };
+
+// struct ConstantNode : Node {
+//   Vec4f value;
+// };
+
+// struct AddNode : Node {
+//   Node *a;
+//   Node *b;
+// };
+
+// struct TextureNode : Node {
+//   u32 texture_slot;
+//   Node *uv;
+// };
+
+// struct OutputNode : Node {
+//   Array<Node *, 32> args;
+// };
+
+Dui::NodeDefinition add_node_def = Dui::NodeDefinition{
+    "Add", {{{"A", 1}, {"B", 1}}}, {{{"Out", 1}}}, {.9, .3, .2, 1}, 100};
+Dui::NodeDefinition output_node_def = Dui::NodeDefinition{
+    "Add",
+    {{{"Color", 1}, {"Roughness", 1}, {"Metal", 1}, {"AO", 1}}},
+    {},
+    {.9, .3, .7, 1},
+    100};
+
+struct AddNodeA : Dui::Node {
+  AddNodeA()
+  {
+    this->content_callback = do_node_contents;
+
+    this->name  = "Add";
+    this->color = {.5, .2, .3, 1};
+    this->size  = 300;
+
+    this->pins.push_back({"A", 1});
+    this->pins.push_back({"B", 1});
+    this->pins.push_back({"Out", 1});
+  }
+
+  static void do_node_contents(Dui::NodesData *data, Node *self)
+  {
+    Dui::Pin *a      = &self->pins[0];
+    Dui::Pin *b      = &self->pins[1];
+    Dui::Pin *output = &self->pins[2];
+
+    Dui::label(a->label, Dui::PIN_TEXT_SIZE * data->scale, {1, 1, 1, 1}, false);
+    Dui::node_input_pin(data, a);
+    Dui::next_line();
+    Dui::label(b->label, Dui::PIN_TEXT_SIZE * data->scale, {1, 1, 1, 1}, false);
+    Dui::node_input_pin(data, b);
+    Dui::next_line();
+    Dui::button("Test", {0, 20 * data->scale}, {.5, .2, .3, 1}, true);
+    Dui::label(output->label, Dui::PIN_TEXT_SIZE * data->scale, {1, 1, 1, 1}, true);
+    Dui::node_output_pin(data, output);
+  }
+};
+
+struct LerpNode : Dui::Node {
+  LerpNode()
+  {
+    this->content_callback = do_node_contents;
+
+    this->name  = "Lerp";
+    this->color = {.3, .5, .2, 1};
+    this->size  = 0;
+
+    this->pins.push_back({"A", 1});
+    this->pins.push_back({"B", 1});
+    this->pins.push_back({"T", 1});
+    this->pins.push_back({"Out", 1});
+  }
+
+  static void do_node_contents(Dui::NodesData *data, Node *self)
+  {
+    Dui::Pin *a      = &self->pins[0];
+    Dui::Pin *b      = &self->pins[1];
+    Dui::Pin *t      = &self->pins[2];
+    Dui::Pin *output = &self->pins[3];
+
+    Dui::label(a->label, Dui::PIN_TEXT_SIZE * data->scale, {1, 1, 1, 1}, false);
+    Dui::node_input_pin(data, a);
+    Dui::next_line();
+
+    static Dui::DropdownData ddd;
+    Dui::start_dropdown(&ddd, {0, 20 * data->scale}, true);
+
+    Dui::dropdown_item(&ddd, "test1");
+    Dui::dropdown_item(&ddd, "test2");
+
+    Dui::end_dropdown(&ddd);
+
+    Dui::label(b->label, Dui::PIN_TEXT_SIZE * data->scale, {1, 1, 1, 1}, false);
+    Dui::node_input_pin(data, b);
+    Dui::next_line();
+    Dui::label(t->label, Dui::PIN_TEXT_SIZE * data->scale, {1, 1, 1, 1}, false);
+    Dui::node_input_pin(data, t);
+    Dui::next_line();
+    Dui::label(output->label, Dui::PIN_TEXT_SIZE * data->scale, {1, 1, 1, 1}, true);
+    Dui::node_output_pin(data, output);
+  }
+};
 
 void do_material_editor_window(Editor::State *state, MaterialEditorWindow *mew)
 {
@@ -526,8 +634,8 @@ void do_material_editor_window(Editor::State *state, MaterialEditorWindow *mew)
   //              shader.src, true);
   // }
 
-  Dui::NodeDefinition node_def_1;
-  Dui::NodeDefinition node_def_2;
+  static Dui::NodeDefinition node_def_1;
+  static Dui::NodeDefinition node_def_2;
   node_def_1.name    = "node_name_1";
   node_def_2.name    = "node_name_2";
   node_def_1.color   = {0.17, .4, .17, 1};
@@ -544,15 +652,17 @@ void do_material_editor_window(Editor::State *state, MaterialEditorWindow *mew)
   if (!init) {
     init = true;
 
+    Dui::add_node(&nodes_data, &add_node_def);
     Dui::add_node(&nodes_data, &node_def_1);
-    Dui::add_node(&nodes_data, &node_def_1);
     Dui::add_node(&nodes_data, &node_def_2);
     Dui::add_node(&nodes_data, &node_def_2);
     Dui::add_node(&nodes_data, &node_def_2);
     Dui::add_node(&nodes_data, &node_def_2);
     Dui::add_node(&nodes_data, &node_def_2);
-    Dui::add_node(&nodes_data, &node_def_2);
-    Dui::add_node(&nodes_data, &node_def_2);
+    Dui::add_node(&nodes_data, &output_node_def);
+    Dui::add_node(&nodes_data, LerpNode());
+    Dui::add_node(&nodes_data, AddNodeA());
+    Dui::add_node(&nodes_data, AddNodeA());
   }
 
   Dui::do_nodes(&nodes_data);

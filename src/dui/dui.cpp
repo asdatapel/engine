@@ -743,8 +743,10 @@ b8 start_popup(String name) { return start_popup(hash(name)); }
 
 void end_popup()
 {
-  s.cc->expand_rect_to_content();
-  s.cc->end_frame(&s, true);
+  Container *cc = get_current_container(&s);
+  cc->line_gap  = 0;
+  cc->expand_rect_to_content();
+  cc->end_frame(&s, true);
 
   pop_scissor(&s.dl);
 
@@ -756,13 +758,6 @@ void end_popup()
         inset(current_popup->container.rect, 1);
 
   s.started_popups_count--;
-
-  // kinda hacky, need to resume the container from the previous popup layer
-  if (s.started_popups_count > 0) {
-    s.cc = &s.popups[s.started_popups_count - 1].container;
-  } else {
-    s.cc = s.cw;
-  }
 }
 
 }  // namespace Dui
@@ -779,7 +774,7 @@ b8 menu_item_button(DuiId id, String text)
 
   id = extend_hash((DuiId)c, id);
 
-  Rect rect = c->place({0, MENU_ITEM_HEIGHT}, true, true, 0);
+  Rect rect = c->place({0, MENU_ITEM_HEIGHT}, true, true);
 
   b8 hot     = do_hot(id, rect, c);
   b8 active  = do_active(id);
@@ -809,7 +804,7 @@ b8 menu_item_submenu(String text, String submenu_name)
 
   DuiId id = extend_hash((DuiId)c, text);
 
-  Rect rect           = c->place({0, MENU_ITEM_HEIGHT}, true, true, 0);
+  Rect rect           = c->place({0, MENU_ITEM_HEIGHT}, true, true);
   Rect highlight_rect = inset(rect, 1.f);
 
   b8 hot     = do_hot(id, rect, c);
@@ -845,8 +840,8 @@ void menu_divider()
   Container *c = get_current_container(&s);
   if (!c) return;
 
-  c->next_line(0);  // make sure we start below other controls
-  Rect rect = c->place({0, 2.5}, true, true, 0);
+  c->next_line();  // make sure we start below other controls
+  Rect rect = c->place({0, 2.5}, true, true);
 
   rect.x -= WINDOW_MARGIN_SIZE;
   rect.width += WINDOW_MARGIN_SIZE * 2;
@@ -1639,6 +1634,7 @@ DuiId start_window(String name, Rect initial_rect)
     return id;
   }
 
+  push_rect(&s.dl, c->z, c->rect, d_dark);
   c->start_frame(&s);
 
   return id;
@@ -1646,8 +1642,9 @@ DuiId start_window(String name, Rect initial_rect)
 
 void end_window()
 {
-  if (s.cc) {
-    s.cc->end_frame(&s);
+  Container *cc = get_current_container(&s);
+  if (cc) {
+    cc->end_frame(&s);
   }
 
   if (s.cw) {
@@ -1678,6 +1675,23 @@ void next_line()
   c->next_line();
 }
 
+void label(String text, f32 height, Color color, b8 right_justified)
+{
+  Container *c = get_current_container(&s);
+  if (!c) return;
+
+  f32 width = s.dl.vfont.get_text_width(text, height);
+  Rect rect = c->place({width, height}, true);
+
+  Vec2f anchor = rect.xy();
+  if (right_justified) {
+    anchor.x += c->content_rect.width;
+  }
+
+  push_vector_text_justified(&s.dl, c->z, text, anchor, color, height,
+                             {right_justified ? 2 : 0, 0});
+}
+
 b8 button(String text, Vec2f size, Color color, b8 fill)
 {
   Container *c = get_current_container(&s);
@@ -1687,7 +1701,7 @@ b8 button(String text, Vec2f size, Color color, b8 fill)
 
   Rect rect = c->place(size, true, fill);
 
-  b8 hot     = do_hot(id, rect, c->rect);
+  b8 hot     = c->do_hot(&s, id, rect);
   b8 active  = do_active(id);
   b8 clicked = hot && s.just_stopped_being_active == id;
 
@@ -1713,9 +1727,90 @@ b8 button(String text, Vec2f size, Color color, b8 fill)
   push_rounded_rect(&s.dl, c->z, rect, 5.f, color);
   push_rounded_rect(&s.dl, c->z, inset(rect, 1.5f), 5.f, darken(color, .2f));
   push_vector_text_centered(&s.dl, c->z, text, rect.center(), {1, 1, 1, 1},
-                            CONTENT_FONT_HEIGHT, {true, true});
+                            rect.height - 4, {true, true});
 
   return clicked;
+}
+
+struct DropdownData {
+  DuiId selected;
+  b8 open = false;
+  Rect rect;
+};
+void start_dropdown(DropdownData *data, Vec2f size, b8 fill = false)
+{
+  Container *c = get_current_container(&s);
+  if (!c) return;
+
+  DuiId id = (DuiId)data;
+
+  Rect rect   = c->place(size, true, fill);
+  Color color = d_dark;
+
+  b8 hot     = c->do_hot(&s, id, rect);
+  b8 active  = do_active(id);
+  b8 clicked = hot && s.just_stopped_being_active == id;
+
+  if (clicked) {
+    open_popup(id, rect.xy(), rect.width);
+  }
+
+  if (hot) {
+    set_cursor_shape(Platform::CursorShape::POINTING_HAND);
+    color = darken(color, .1f);
+  }
+
+  push_rounded_rect(&s.dl, c->z, rect, 5.f, color);
+  push_rounded_rect(&s.dl, c->z, inset(rect, 1.5f), 5.f, lighten(color, .2f));
+
+  data->rect = rect;
+  data->open = start_popup(id);
+}
+b8 dropdown_item(DropdownData *data, String text)
+{
+  DuiId id    = extend_hash((DuiId)data, hash(text));
+  b8 selected = data->selected == id;
+
+  Container *c = get_current_container(&s);
+  if (!c) return selected;
+
+  if (!data->open) {
+    if (selected) {
+      push_vector_text_centered(&s.dl, c->z, text, data->rect.center(),
+                                {1, 1, 1, 1}, data->rect.height - 4,
+                                {true, true});
+    }
+    return selected;
+  }
+
+  Rect rect = c->place({0, MENU_ITEM_HEIGHT}, true, true);
+
+  b8 hot     = do_hot(id, rect, c);
+  b8 active  = do_active(id);
+  b8 clicked = hot && s.just_stopped_being_active == id;
+
+  if (hot) {
+    push_rounded_rect(&s.dl, c->z, rect, 4.f, {.5, .5, .5, .5});
+    set_cursor_shape(Platform::CursorShape::POINTING_HAND);
+  }
+
+  if (clicked) {
+    clear_popups();
+    data->selected = id;
+  }
+
+  Vec2f text_pos  = {rect.x + WINDOW_MARGIN_SIZE, rect.y + WINDOW_MARGIN_SIZE};
+  f32 text_height = MENU_ITEM_HEIGHT - (WINDOW_MARGIN_SIZE * 2);
+  push_vector_text(&s.dl, c->z, text, text_pos, {1, 1, 1, 1}, text_height);
+
+  return selected;
+}
+
+void end_dropdown(DropdownData *data)
+{
+  if (data->open) {
+    end_popup();
+  }
 }
 
 void texture(Vec2f size, u32 texture_id)
@@ -1994,7 +2089,7 @@ b8 directory_item(DuiId id, String text, b8 expandable, b8 selected = false)
   f32 height = CONTENT_FONT_HEIGHT + 4 + 4;
   Rect rect  = c->place({0, height}, true, true);
 
-  b8 hot      = do_hot(id, rect, c->rect);
+  b8 hot      = c->do_hot(&s, id, rect);
   b8 active   = do_active(id);
   b8 dragging = do_dragging(id);
   selected    = do_selected(id, true) || selected;
