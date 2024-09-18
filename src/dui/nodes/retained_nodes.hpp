@@ -24,7 +24,7 @@ struct Control {
   b8 dragging = false;
   b8 selected = false;
 
-  Rect rect;
+  Engine::Rect rect;
 
   void do_control(Input *input, b8 node_on_top)
   {
@@ -62,7 +62,7 @@ struct Control {
   }
 
   Vec2f get_anchor() { return rect.center(); }
-  Rect get_anchor_interaction_rect()
+  Engine::Rect get_anchor_interaction_rect()
   {
     const f32 INTERACTION_RECT_RADIUS = 3.f;
 
@@ -92,7 +92,7 @@ struct Pin : Control {
     this->type  = type;
   }
 
-  Rect calc_rect(Rect parent_rect, i32 index, f32 scale, Vec2f origin,
+  Engine::Rect calc_rect(Engine::Rect parent_rect, i32 index, f32 scale, Vec2f origin,
                  b8 is_output)
   {
     f32 y_offset = index * (PIN_TEXT_SIZE + WINDOW_MARGIN_SIZE);
@@ -108,7 +108,7 @@ struct Pin : Control {
     return rect;
   }
 
-  Rect calc_rect(Vec2f center, f32 scale, Vec2f origin)
+  Engine::Rect calc_rect(Vec2f center, f32 scale, Vec2f origin)
   {
     rect.width  = PIN_WIDTH * scale;
     rect.height = PIN_HEIGHT * scale;
@@ -149,7 +149,7 @@ struct Node : Control {
     select_on_mouse_down = true;
   }
 
-  Rect calc_rect(Vec2f parent_pos, f32 scale, Vec2f origin)
+  Engine::Rect calc_rect(Vec2f parent_pos, f32 scale, Vec2f origin)
   {
     rect.x     = parent_pos.x + origin.x + position.x * scale;
     rect.y     = parent_pos.y + origin.y + position.y * scale;
@@ -159,12 +159,12 @@ struct Node : Control {
     return rect;
   }
 
-  Rect get_titlebar_rect(f32 scale)
+  Engine::Rect get_titlebar_rect(f32 scale)
   {
     return {rect.x, rect.y, rect.width, NODE_TITLEBAR_HEIGHT * scale};
   }
 
-  Rect get_body_rect(f32 scale)
+  Engine::Rect get_body_rect(f32 scale)
   {
     f32 extra_margin = 5.f * scale;
     return {rect.x + extra_margin, rect.y + NODE_TITLEBAR_HEIGHT * scale,
@@ -207,7 +207,7 @@ struct NodesData {
 
   b8 selection_in_progress = false;
   Vec2f selection_start_pos;
-  Rect selection_rect;
+  Engine::Rect selection_rect;
 
   b8 link_in_progress             = false;
   b8 link_in_progress_free_output = false;
@@ -268,7 +268,7 @@ void do_nodes(NodesData *data)
   if (!c) return;
   data->container_draw_scissor_idx = c->draw_scissor_idx;
 
-  Rect node_editor_rect = c->place(c->content_rect.span(), true, false);
+  Engine::Rect node_editor_rect = c->place(c->content_rect.span(), true, false);
   {
     if (s.input->mouse_buttons[(i32)MouseButton::MIDDLE]) {
       data->target_origin += s.input->mouse_pos_delta;
@@ -344,11 +344,11 @@ void do_nodes(NodesData *data)
 
     data->current_node = node;
 
-    Rect node_rect =
+    Engine::Rect node_rect =
         node->calc_rect(node_editor_rect.xy(), data->scale, data->origin);
-    Rect content_rect  = node->get_body_rect(data->scale);
-    Rect border_rect   = outset(node_rect, 1.f);
-    Rect titlebar_rect = node->get_titlebar_rect(data->scale);
+    Engine::Rect content_rect  = node->get_body_rect(data->scale);
+    Engine::Rect border_rect   = outset(node_rect, 1.f);
+    Engine::Rect titlebar_rect = node->get_titlebar_rect(data->scale);
 
     b8 is_in_selection_box = data->selection_in_progress &&
                              overlaps(node_rect, data->selection_rect);
@@ -457,7 +457,7 @@ void node_output_pin(NodesData *data, Pin *pin)
   Vec2f pin_center =
       Vec2f{data->current_node->rect.x + data->current_node->rect.width,
             c->content_rect.y + c->cursor.y + (c->cursor_size / 2)};
-  Rect pin_rect = pin->calc_rect(pin_center, data->scale, data->origin);
+  Engine::Rect pin_rect = pin->calc_rect(pin_center, data->scale, data->origin);
 
   pin->do_control(s.input, data->top_node_last_frame == data->current_node);
   if (pin->hot) {
@@ -487,7 +487,7 @@ void node_output_pin(NodesData *data, Pin *pin)
 
   push_draw_settings(&s.dl, {true, data->container_draw_scissor_idx});
 
-  Rect pin_border_rect = outset(pin_rect, 1);
+  Engine::Rect pin_border_rect = outset(pin_rect, 1);
   push_rounded_rect(&s.dl, c->z, pin_border_rect, pin_border_rect.width / 2,
                     {0, 0, 0, 1});
   push_rounded_rect(&s.dl, c->z, pin_rect, pin_rect.width / 2, color);
@@ -502,7 +502,7 @@ void node_input_pin(NodesData *data, Pin *pin)
   Vec2f pin_center =
       Vec2f{data->current_node->rect.x,
             c->content_rect.y + c->cursor.y + (c->cursor_size / 2)};
-  Rect pin_rect = pin->calc_rect(pin_center, data->scale, data->origin);
+  Engine::Rect pin_rect = pin->calc_rect(pin_center, data->scale, data->origin);
 
   pin->do_control(s.input, data->top_node_last_frame == data->current_node);
   if (pin->hot) {
@@ -543,7 +543,7 @@ void node_input_pin(NodesData *data, Pin *pin)
 
   push_draw_settings(&s.dl, {true, data->container_draw_scissor_idx});
 
-  Rect pin_border_rect = outset(pin_rect, 1);
+  Engine::Rect pin_border_rect = outset(pin_rect, 1);
   push_rounded_rect(&s.dl, c->z, pin_border_rect, pin_border_rect.width / 2,
                     {0, 0, 0, 1});
   push_rounded_rect(&s.dl, c->z, pin_rect, pin_rect.width / 2, color);

@@ -6,7 +6,7 @@
 #include "editor/asset_browser.hpp"
 #include "editor/state.hpp"
 #include "editor/material_editor.hpp"
-#include "gpu/vulkan/pipeline.hpp"
+#include "gpu/gpu.hpp"
 
 namespace Editor
 {
@@ -17,8 +17,7 @@ Color l_dark = Color::from_int(0x003e71);  //{1, 0.31373, 0.01176, 1};
 
 State init() {return {};}
 
-void do_frame(Gpu::Device *gpu, Gpu::Pipeline pipeline,
-              Platform::GlfwWindow *window, Input *input)
+void do_frame(Gpu::Device *gpu, Platform::GlfwWindow *window, Input *input)
 {
   Dui::start_frame(input, window);
 
@@ -79,13 +78,13 @@ void do_frame(Gpu::Device *gpu, Gpu::Pipeline pipeline,
   Dui::end_window();
   
   static AssetBrowser ab{""};
-  do_asset_browser(&state, &ab);
+  // do_asset_browser(&state, &ab);
 
   for (i32 i = 0; i < state.material_editor_windows.size; i++) {
     do_material_editor_window(&state, &state.material_editor_windows[i]);
   }
 
-  Dui::end_frame(window, gpu, pipeline);
+  Dui::end_frame(window, gpu);
 }
 
 };  // namespace Editor

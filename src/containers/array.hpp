@@ -3,6 +3,7 @@
 #include <cassert>
 #include <initializer_list>
 
+#include "logging.hpp"
 #include "types.hpp"
 
 template <typename T, u32 N>

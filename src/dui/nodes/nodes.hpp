@@ -41,7 +41,7 @@
 //   Node *current_node       = nullptr;
 //   b8 interacted_this_frame = false;
 
-//   Rect current_node_rect;
+//   Engine::Rect current_node_rect;
 //   RoundedRectPrimitive *draw_rect_ref;
 //   f32 next_input_y;
 //   f32 next_output_y;
@@ -56,7 +56,7 @@
 // };
 // NodeEditorState nodes_state;
 
-// Rect resize_for_zoom(Rect rect)
+// Engine::Rect resize_for_zoom(Rect rect)
 // {
 //   return {
 //       (rect.x * nodes_state.scale) + nodes_state.origin.x,
@@ -93,7 +93,7 @@
 //                                nodes_state.in_progress_link_start);
 //     Vec2f line_rect_span = abs(nodes_state.in_progress_link_end -
 //                                nodes_state.in_progress_link_start);
-//     Rect line_rect       = {line_rect_pos.x, line_rect_pos.y, line_rect_span.x,
+//     Engine::Rect line_rect       = {line_rect_pos.x, line_rect_pos.y, line_rect_span.x,
 //                             line_rect_span.y};
 
 //     if (c) {
@@ -125,7 +125,7 @@
 //   t += 0.001f;
 //   f32 scale = 1 + sinf(t);
 
-//   Rect titlebar_rect = {node->position.x, node->position.y, node->width,
+//   Engine::Rect titlebar_rect = {node->position.x, node->position.y, node->width,
 //                         MIN_NODE_HEIGHT};
 //   titlebar_rect      = resize_for_zoom(titlebar_rect);
 //   titlebar_rect.x += c->content_rect.x;
@@ -166,7 +166,7 @@
 //   Container *c = get_current_container(&s);
 //   if (!c) return;
 
-//   Rect new_rect = resize_for_zoom(
+//   Engine::Rect new_rect = resize_for_zoom(
 //       {nodes_state.current_node->position.x,
 //        nodes_state.current_node->position.y, nodes_state.current_node->width,
 //        nodes_state.next_input_y - nodes_state.current_node->position.y});
@@ -192,7 +192,7 @@
 //   Container *c = get_current_container(&s);
 //   if (!c) return;
 
-//   Rect rect = {
+//   Engine::Rect rect = {
 //       node->position.x + NODE_MARGIN,
 //       nodes_state.next_input_y,
 //       (node->width / 2.f) - (2 * NODE_MARGIN),
@@ -200,7 +200,7 @@
 //   };
 //   nodes_state.next_input_y += rect.height + NODE_MARGIN;
 
-//   rect = resize_for_zoom(rect);
+//   Engine::Rect = resize_for_zoom(rect);
 //   rect.x += c->content_rect.x;
 //   rect.y += c->content_rect.y;
 
@@ -237,7 +237,7 @@
 //   Container *c = get_current_container(&s);
 //   if (!c) return;
 
-//   Rect rect = {
+//   Engine::Rect rect = {
 //       node->position.x + node->width -
 //           (NODE_MARGIN + (node->width / 2.f) - (2 * NODE_MARGIN)),
 //       nodes_state.next_output_y,
@@ -246,7 +246,7 @@
 //   };
 //   nodes_state.next_output_y += rect.height + NODE_MARGIN;
 
-//   rect = resize_for_zoom(rect);
+//   Engine::Rect = resize_for_zoom(rect);
 //   rect.x += c->content_rect.x;
 //   rect.y += c->content_rect.y;
 

@@ -12,12 +12,6 @@
 namespace Gpu
 {
 
-enum struct Format {
-  RGBA8U,
-  RG32F,
-  RGB32F,
-  RGBA32F,
-};
 VkFormat to_vk_format(Format f)
 {
   switch (f) {
@@ -139,7 +133,6 @@ Array<VkDescriptorSetLayout, 4> create_dui_descriptor_set_layouts(
 
   VkDescriptorSetLayoutBinding bindings[] = {sampler_layout_binding,
                                              buffer_layout_binding};
-  VkDescriptorSetLayoutCreateInfo layout_info{};
   layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
   layout_info.flags =
       VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT;
@@ -706,7 +699,7 @@ void push_constant(Device *device, Pipeline pipeline, void *data, u32 size)
                      VK_SHADER_STAGE_VERTEX_BIT, 0, size, data);
 }
 
-void set_scissor(Device *device, Rect rect)
+void set_scissor(Device *device, Engine::Rect rect)
 {
   VkRect2D scissor{};
   scissor.offset = {(i32)rect.x, (i32)rect.y};

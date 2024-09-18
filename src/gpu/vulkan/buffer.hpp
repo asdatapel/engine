@@ -133,34 +133,15 @@ void upload_buffer(Device *device, Buffer buffer, void *data, u32 size)
   vkUnmapMemory(device->device, buffer.vma_allocation->GetMemory());
 }
 
-Buffer create_vertex_buffer(Device *device, u32 size)
+Buffer create_buffer(Device *device, u32 size)
 {
   Buffer vertex_buffer = create_buffer(
       device, size,
-      VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 0);
+      VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | 
+      VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, 0);
   buffers.push_back(vertex_buffer);
 
   return vertex_buffer;
-};
-
-Buffer create_index_buffer(Device *device, u32 size)
-{
-  Buffer buffer = create_buffer(
-      device, size,
-      VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, 0);
-  buffers.push_back(buffer);
-
-  return buffer;
-};
-
-Buffer create_storage_buffer(Device *device, u32 size)
-{
-  Buffer buffer = create_buffer(
-      device, size,
-      VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, 0);
-  buffers.push_back(buffer);
-
-  return buffer;
 };
 
 void draw_vertex_buffer(Device *device, Buffer b, u32 offset, u32 vert_count)

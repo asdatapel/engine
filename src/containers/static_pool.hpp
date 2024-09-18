@@ -96,7 +96,7 @@ struct StaticPool {
     return emplace(value, index % SIZE);
   }
 
-  void remove(Element *elem) { remove(index_of(&elem->value)) }
+  void remove(Element *elem) { remove(index_of(&elem->value)); }
 
   void remove(u64 i)
   {

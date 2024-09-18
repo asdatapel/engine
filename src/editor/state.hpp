@@ -27,7 +27,7 @@ struct MaterialEditorWindow {
 namespace Editor
 {
 struct State {
-  String resource_path = "../fracas/";
+  String resource_path = "../";
 
   Gpu::Pipeline pipeline;
 

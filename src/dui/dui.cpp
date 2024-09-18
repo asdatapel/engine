@@ -8,8 +8,9 @@
 #include "dui/group.hpp"
 #include "dui/interaction.hpp"
 #include "font.hpp"
-#include "gpu/vulkan/framebuffer.hpp"
+#include "gpu/gpu.hpp"
 #include "input.hpp"
+#include "interaction.hpp"
 #include "logging.hpp"
 #include "math/math.hpp"
 #include "plugin.hpp"
@@ -62,7 +63,7 @@ void remove_root_group(Group *g)
   s.root_groups.shift_delete(z);
 }
 
-Group *create_group(Group *parent, Rect rect)
+Group *create_group(Group *parent, Engine::Rect rect)
 {
   Group *g = s.groups.push_back({});
   g->id    = s.groups.index_of(g);
@@ -260,7 +261,7 @@ Group *unparent_window(DuiId window_id)
   return g;
 }
 
-Container *create_new_window(DuiId id, String name, Rect rect)
+Container *create_new_window(DuiId id, String name, Engine::Rect rect)
 {
   Container *window = s.containers.emplace_wrapped(id, {});
   window->id        = id;
@@ -476,9 +477,9 @@ Group *handle_dragging_group(Group *g, DuiId id)
   b8 already_found_hot = false;
 
   // _pos = 0 for left/top, 1 for middle, 2 for right/bottom
-  auto snap_in_rect = [](Vec2f span, Rect container, i32 x_pos,
-                         i32 y_pos) -> Rect {
-    Rect rect;
+  auto snap_in_rect = [](Vec2f span, Engine::Rect container, i32 x_pos,
+                         i32 y_pos) -> Engine::Rect {
+    Engine::Rect rect;
     rect.width  = span.x;
     rect.height = span.y;
 
@@ -501,7 +502,7 @@ Group *handle_dragging_group(Group *g, DuiId id)
     return rect;
   };
 
-  auto do_snap_control = [](DuiId control_id, DuiId dragging_id, Rect rect,
+  auto do_snap_control = [](DuiId control_id, DuiId dragging_id, Engine::Rect rect,
                             Group *g, Group *target_group, i32 axis, b8 dir,
                             b8 already_found_hot) -> b8 {
     DuiId hot = do_hot(control_id, rect);
@@ -511,7 +512,7 @@ Group *handle_dragging_group(Group *g, DuiId id)
       push_rect(&s.dl, 0, rect, l);
 
     if (hot && !already_found_hot) {
-      Rect preview_rect = target_group->rect;
+      Engine::Rect preview_rect = target_group->rect;
       if (axis == 0) {
         preview_rect.height /= 2;
         if (dir) preview_rect.y += preview_rect.height;
@@ -534,7 +535,7 @@ Group *handle_dragging_group(Group *g, DuiId id)
   Group *target_group = get_top_leaf_group_at_pos(s.input->mouse_pos, true);
 
   if (target_group && !contained_in(target_group, g)) {
-    Rect window_rect = target_group->get_window_rect();
+    Engine::Rect window_rect = target_group->get_window_rect();
 
     f32 dock_controls_width = DOCK_CONTROLS_WIDTH;
     dock_controls_width = fminf(dock_controls_width, window_rect.width * .75f);
@@ -548,7 +549,7 @@ Group *handle_dragging_group(Group *g, DuiId id)
                                      half_controls_width};
 
     if (target_group->root != target_group->id) {
-      Rect root_window_rect;
+      Engine::Rect root_window_rect;
       if (target_group->root == s.fullscreen_group) {
         root_window_rect = target_group->root.get()->rect;
       } else {
@@ -559,13 +560,13 @@ Group *handle_dragging_group(Group *g, DuiId id)
       SUB_ID(right_root_dock_control_id, id);
       SUB_ID(top_root_dock_control_id, id);
       SUB_ID(bottom_root_dock_control_id, id);
-      Rect left_root_dock_control_rect =
+      Engine::Rect left_root_dock_control_rect =
           snap_in_rect(vertical_button_span, root_window_rect, 0, 1);
-      Rect right_root_dock_control_rect =
+      Engine::Rect right_root_dock_control_rect =
           snap_in_rect(vertical_button_span, root_window_rect, 2, 1);
-      Rect top_root_dock_control_rect =
+      Engine::Rect top_root_dock_control_rect =
           snap_in_rect(horizontal_button_span, root_window_rect, 1, 0);
-      Rect bottom_root_dock_control_rect =
+      Engine::Rect bottom_root_dock_control_rect =
           snap_in_rect(horizontal_button_span, root_window_rect, 1, 2);
 
       b8 left_hot = do_snap_control(
@@ -585,20 +586,20 @@ Group *handle_dragging_group(Group *g, DuiId id)
       }
     }
 
-    Rect dock_control_rect = snap_in_rect(
+    Engine::Rect dock_control_rect = snap_in_rect(
         {dock_controls_width, dock_controls_width}, window_rect, 1, 1);
 
     SUB_ID(left_dock_control_id, id);
     SUB_ID(right_dock_control_id, id);
     SUB_ID(top_dock_control_id, id);
     SUB_ID(bottom_dock_control_id, id);
-    Rect left_dock_control_rect =
+    Engine::Rect left_dock_control_rect =
         snap_in_rect(vertical_button_span, dock_control_rect, 0, 1);
-    Rect right_dock_control_rect =
+    Engine::Rect right_dock_control_rect =
         snap_in_rect(vertical_button_span, dock_control_rect, 2, 1);
-    Rect top_dock_control_rect =
+    Engine::Rect top_dock_control_rect =
         snap_in_rect(horizontal_button_span, dock_control_rect, 1, 0);
-    Rect bottom_dock_control_rect =
+    Engine::Rect bottom_dock_control_rect =
         snap_in_rect(horizontal_button_span, dock_control_rect, 1, 2);
 
     b8 left_hot =
@@ -619,7 +620,7 @@ Group *handle_dragging_group(Group *g, DuiId id)
     if (target_group->id == s.empty_group &&
         s.empty_group.get()->windows.size == 0) {
       SUB_ID(center_dock_control_id, id);
-      Rect center_dock_control_rect =
+      Engine::Rect center_dock_control_rect =
           inset(dock_control_rect, dock_controls_width / 4.f);
 
       DuiId hot = do_hot(center_dock_control_id, center_dock_control_rect);
@@ -774,7 +775,7 @@ b8 menu_item_button(DuiId id, String text)
 
   id = extend_hash((DuiId)c, id);
 
-  Rect rect = c->place({0, MENU_ITEM_HEIGHT}, true, true);
+  Engine::Rect rect = c->place({0, MENU_ITEM_HEIGHT}, true, true);
 
   b8 hot     = do_hot(id, rect, c);
   b8 active  = do_active(id);
@@ -804,8 +805,8 @@ b8 menu_item_submenu(String text, String submenu_name)
 
   DuiId id = extend_hash((DuiId)c, text);
 
-  Rect rect           = c->place({0, MENU_ITEM_HEIGHT}, true, true);
-  Rect highlight_rect = inset(rect, 1.f);
+  Engine::Rect rect           = c->place({0, MENU_ITEM_HEIGHT}, true, true);
+  Engine::Rect highlight_rect = inset(rect, 1.f);
 
   b8 hot     = do_hot(id, rect, c);
   b8 active  = do_active(id);
@@ -841,7 +842,7 @@ void menu_divider()
   if (!c) return;
 
   c->next_line();  // make sure we start below other controls
-  Rect rect = c->place({0, 2.5}, true, true);
+  Engine::Rect rect = c->place({0, 2.5}, true, true);
 
   rect.x -= WINDOW_MARGIN_SIZE;
   rect.width += WINDOW_MARGIN_SIZE * 2;
@@ -899,9 +900,9 @@ void draw_group_and_children(Group *g)
     return;
   }
 
-  Rect titlebar_rect               = g->get_titlebar_full_rect();
-  Rect titlebar_bottom_border_rect = g->get_titlebar_bottom_border_rect();
-  Rect group_border_rect           = g->get_border_rect();
+  Engine::Rect titlebar_rect               = g->get_titlebar_full_rect();
+  Engine::Rect titlebar_bottom_border_rect = g->get_titlebar_bottom_border_rect();
+  Engine::Rect group_border_rect           = g->get_border_rect();
 
   push_rect(&s.dl, g->z, titlebar_rect, d);
   push_rect(&s.dl, g->z, titlebar_bottom_border_rect, d_light);
@@ -918,7 +919,7 @@ void draw_group_and_children(Group *g)
     Vec2f tab_span = g->get_tab_margin_span(
         w_i, combined_extra_desired_tab_space, available_extra_tab_space);
 
-    Rect tab_rect = {tab_pos.x, tab_pos.y, tab_span.x, tab_span.y + 1.f};
+    Engine::Rect tab_rect = {tab_pos.x, tab_pos.y, tab_span.x, tab_span.y + 1.f};
     tab_pos.x += tab_rect.width + TAB_GAP;
 
     Color tab_color = d_dark;
@@ -949,7 +950,7 @@ void start_frame_for_leaf(Group *g)
     DuiId window_id = g->windows[w_i];
     Container *w    = get_container(window_id);
 
-    Rect tab_rect = g->get_tab_margin_rect(w_i);
+    Engine::Rect tab_rect = g->get_tab_margin_rect(w_i);
 
     SUB_ID(tab_handle_id, window_id);
     DuiId tab_handle_hot      = do_hot(tab_handle_id, tab_rect, g->root.get());
@@ -973,7 +974,7 @@ void start_frame_for_leaf(Group *g)
     }
   }
 
-  Rect titlebar_rect = g->get_titlebar_margin_rect();
+  Engine::Rect titlebar_rect = g->get_titlebar_margin_rect();
   SUB_ID(root_handle_id, active_window_id);
   DuiId root_handle_hot = do_hot(root_handle_id, titlebar_rect, g->root.get());
   DuiId root_handle_active   = do_active(root_handle_id);
@@ -1025,7 +1026,7 @@ void start_frame_for_group(Group *g)
 
         Vec2f clamped_mouse_pos = clamp_to_rect(s.input->mouse_pos, s.canvas);
 
-        Rect left_top_handle_rect;
+        Engine::Rect left_top_handle_rect;
         left_top_handle_rect.x = g->rect.x - RESIZE_HANDLES_OVERSIZE;
         left_top_handle_rect.y = g->rect.y - RESIZE_HANDLES_OVERSIZE;
         left_top_handle_rect.width =
@@ -1061,7 +1062,7 @@ void start_frame_for_group(Group *g)
           }
         }
 
-        Rect right_top_handle_rect;
+        Engine::Rect right_top_handle_rect;
         right_top_handle_rect.x =
             g->rect.x + g->rect.width - WINDOW_BORDER_SIZE - WINDOW_MARGIN_SIZE;
 
@@ -1098,7 +1099,7 @@ void start_frame_for_group(Group *g)
           }
         }
 
-        Rect left_bottom_handle_rect;
+        Engine::Rect left_bottom_handle_rect;
         left_bottom_handle_rect.x = g->rect.x - RESIZE_HANDLES_OVERSIZE;
         left_bottom_handle_rect.y = g->rect.y + g->rect.height -
                                     WINDOW_BORDER_SIZE - WINDOW_MARGIN_SIZE;
@@ -1134,7 +1135,7 @@ void start_frame_for_group(Group *g)
           }
         }
 
-        Rect right_bottom_handle_rect;
+        Engine::Rect right_bottom_handle_rect;
         right_bottom_handle_rect.x =
             g->rect.x + g->rect.width - WINDOW_BORDER_SIZE - WINDOW_MARGIN_SIZE;
         right_bottom_handle_rect.y = g->rect.y + g->rect.height -
@@ -1170,7 +1171,7 @@ void start_frame_for_group(Group *g)
           }
         }
 
-        Rect left_handle_rect;
+        Engine::Rect left_handle_rect;
         left_handle_rect.x = g->rect.x - RESIZE_HANDLES_OVERSIZE;
         left_handle_rect.y = g->rect.y;
         left_handle_rect.width =
@@ -1199,7 +1200,7 @@ void start_frame_for_group(Group *g)
           }
         }
 
-        Rect right_handle_rect;
+        Engine::Rect right_handle_rect;
         right_handle_rect.x =
             g->rect.x + g->rect.width - WINDOW_BORDER_SIZE - WINDOW_MARGIN_SIZE;
         right_handle_rect.y = g->rect.y;
@@ -1227,7 +1228,7 @@ void start_frame_for_group(Group *g)
           }
         }
 
-        Rect top_handle_rect;
+        Engine::Rect top_handle_rect;
         top_handle_rect.x     = g->rect.x;
         top_handle_rect.y     = g->rect.y - RESIZE_HANDLES_OVERSIZE;
         top_handle_rect.width = g->rect.width;
@@ -1256,7 +1257,7 @@ void start_frame_for_group(Group *g)
           }
         }
 
-        Rect bottom_handle_rect;
+        Engine::Rect bottom_handle_rect;
         bottom_handle_rect.x = g->rect.x;
         bottom_handle_rect.y = g->rect.y + g->rect.height - WINDOW_BORDER_SIZE -
                                WINDOW_MARGIN_SIZE;
@@ -1287,12 +1288,12 @@ void start_frame_for_group(Group *g)
 
       // either the right or left window control should be fully in the canvas
       {
-        Rect titlebar_content_rect = g->get_titlebar_content_rect();
+        Engine::Rect titlebar_content_rect = g->get_titlebar_content_rect();
 
-        Rect left_window_control  = titlebar_content_rect;
+        Engine::Rect left_window_control  = titlebar_content_rect;
         left_window_control.width = WINDOW_CONTROL_WIDTH;
 
-        Rect right_window_control = titlebar_content_rect;
+        Engine::Rect right_window_control = titlebar_content_rect;
         right_window_control.x    = titlebar_content_rect.x +
                                  titlebar_content_rect.width -
                                  WINDOW_CONTROL_WIDTH;
@@ -1325,7 +1326,7 @@ void start_frame_for_group(Group *g)
 
   for (i32 i = 1; i < g->splits.size; i++) {
     if (g->split_axis == 0) {
-      Rect split_move_handle;
+      Engine::Rect split_move_handle;
       split_move_handle.x = g->rect.x;
       split_move_handle.y =
           g->splits[i].div_position - WINDOW_BORDER_SIZE - WINDOW_MARGIN_SIZE;
@@ -1379,7 +1380,7 @@ void start_frame_for_group(Group *g)
         g->splits[i].div_pct *= down_pct_change;
       }
     } else if (g->split_axis == 1) {
-      Rect split_move_handle;
+      Engine::Rect split_move_handle;
       split_move_handle.x =
           g->splits[i].div_position - WINDOW_BORDER_SIZE - WINDOW_MARGIN_SIZE;
       split_move_handle.y      = g->rect.y;
@@ -1516,8 +1517,8 @@ void start_frame(Input *input, Platform::GlfwWindow *window)
   i32 top_root_group_at_mouse_pos_z = -1;
   if (!s.top_container_is_popup) {
     for (i32 i = 0; i < s.root_groups.size; i++) {
-      Rect rect          = s.root_groups[i].get()->rect;
-      Rect oversize_rect = {rect.x - RESIZE_HANDLES_OVERSIZE,
+      Engine::Rect rect          = s.root_groups[i].get()->rect;
+      Engine::Rect oversize_rect = {rect.x - RESIZE_HANDLES_OVERSIZE,
                             rect.y - RESIZE_HANDLES_OVERSIZE,
                             rect.width + RESIZE_HANDLES_OVERSIZE * 2,
                             rect.height + RESIZE_HANDLES_OVERSIZE * 2};
@@ -1565,11 +1566,10 @@ void start_frame(Input *input, Platform::GlfwWindow *window)
   }
 }
 
-void end_frame(Platform::GlfwWindow *window, Gpu::Device *device,
-               Gpu::Pipeline pipeline)
+void end_frame(Platform::GlfwWindow *window, Gpu::Device *device)
 {
   if (s.menubar_visible) {
-    Rect menubar_rect = {0, 0, s.window_span.x, MENUBAR_HEIGHT};
+    Engine::Rect menubar_rect = {0, 0, s.window_span.x, MENUBAR_HEIGHT};
     push_rect(&s.dl, 0, menubar_rect, d);
 
     String menuitems[]           = {"File", "Edit", "View", "Window"};
@@ -1577,7 +1577,7 @@ void end_frame(Platform::GlfwWindow *window, Gpu::Device *device,
     for (i32 i = 0; i < 4; i++) {
       DuiId menubar_item_id = hash("MenubarItem", menuitems[i]);
 
-      Rect menubar_item_rect = {
+      Engine::Rect menubar_item_rect = {
           next_menubar_item_offset - MENUBAR_MARGIN, MENUBAR_MARGIN,
           s.dl.vfont.get_text_width(menuitems[i], MENUBAR_FONT_SIZE) +
               MENUBAR_MARGIN * 2,
@@ -1609,12 +1609,12 @@ void end_frame(Platform::GlfwWindow *window, Gpu::Device *device,
     }
   }
 
-  draw_system_end_frame(&s.dl, device, pipeline, s.window_span, s.frame);
+  draw_system_end_frame(&s.dl, device, s.window_span, s.frame);
 
   window->set_cursor_shape(s.cursor_shape);
 }
 
-DuiId start_window(String name, Rect initial_rect)
+DuiId start_window(String name, Engine::Rect initial_rect)
 {
   DuiId id = hash(name);
 
@@ -1681,7 +1681,7 @@ void label(String text, f32 height, Color color, b8 right_justified)
   if (!c) return;
 
   f32 width = s.dl.vfont.get_text_width(text, height);
-  Rect rect = c->place({width, height}, true);
+  Engine::Rect rect = c->place({width, height}, true);
 
   Vec2f anchor = rect.xy();
   if (right_justified) {
@@ -1699,7 +1699,7 @@ b8 button(String text, Vec2f size, Color color, b8 fill)
 
   DuiId id = extend_hash((DuiId)c, text);
 
-  Rect rect = c->place(size, true, fill);
+  Engine::Rect rect = c->place(size, true, fill);
 
   b8 hot     = c->do_hot(&s, id, rect);
   b8 active  = do_active(id);
@@ -1735,7 +1735,7 @@ b8 button(String text, Vec2f size, Color color, b8 fill)
 struct DropdownData {
   DuiId selected;
   b8 open = false;
-  Rect rect;
+  Engine::Rect rect;
 };
 void start_dropdown(DropdownData *data, Vec2f size, b8 fill = false)
 {
@@ -1744,7 +1744,7 @@ void start_dropdown(DropdownData *data, Vec2f size, b8 fill = false)
 
   DuiId id = (DuiId)data;
 
-  Rect rect   = c->place(size, true, fill);
+  Engine::Rect rect   = c->place(size, true, fill);
   Color color = d_dark;
 
   b8 hot     = c->do_hot(&s, id, rect);
@@ -1783,7 +1783,7 @@ b8 dropdown_item(DropdownData *data, String text)
     return selected;
   }
 
-  Rect rect = c->place({0, MENU_ITEM_HEIGHT}, true, true);
+  Engine::Rect rect = c->place({0, MENU_ITEM_HEIGHT}, true, true);
 
   b8 hot     = do_hot(id, rect, c);
   b8 active  = do_active(id);
@@ -1818,7 +1818,7 @@ void texture(Vec2f size, u32 texture_id)
   Container *c = get_current_container(&s);
   if (!c) return;
 
-  Rect rect = c->place(size, true);
+  Engine::Rect rect = c->place(size, true);
 
   push_texture_rect(&s.dl, c->z, rect, {0, 1, 1, 0}, texture_id);
 }
@@ -1832,8 +1832,8 @@ void text_input(StaticString<N> *str)
   DuiId id = extend_hash((DuiId)c, (DuiId)str);
 
   f32 height       = CONTENT_FONT_HEIGHT + 4 + 4;
-  Rect border_rect = c->place({0, height}, true, true);
-  Rect rect        = inset(border_rect, 1);
+  Engine::Rect border_rect = c->place({0, height}, true, true);
+  Engine::Rect rect        = inset(border_rect, 1);
 
   b8 hot      = do_hot(id, rect, c->rect);
   b8 active   = do_active(id);
@@ -2048,7 +2048,7 @@ void text_input(StaticString<N> *str)
   push_scissor(&s.dl, border_rect);
 
   if (selected && highlight_start_idx != cursor_idx) {
-    Rect highlight_rect = {fminf(highlight_start_pos, cursor_pos), rect.y + 3,
+    Engine::Rect highlight_rect = {fminf(highlight_start_pos, cursor_pos), rect.y + 3,
                            fabsf(cursor_pos - highlight_start_pos),
                            rect.height - 6};
     push_rect(&s.dl, c->z, highlight_rect, highlight);
@@ -2059,7 +2059,7 @@ void text_input(StaticString<N> *str)
                             {1, 1, 1, 1}, font_size, {false, true});
 
   if (selected) {
-    Rect cursor_rect = {floorf(cursor_pos), rect.y + 3, 1.25f, rect.height - 6};
+    Engine::Rect cursor_rect = {floorf(cursor_pos), rect.y + 3, 1.25f, rect.height - 6};
     Color cursor_color = highlight;
     cursor_color.a     = 1.f - (f32)((i32)(cursor_blink_time * 1.5) % 2);
     push_rect(&s.dl, c->z, cursor_rect, cursor_color);
@@ -2087,7 +2087,7 @@ b8 directory_item(DuiId id, String text, b8 expandable, b8 selected = false)
   id = extend_hash((DuiId)c, id);
 
   f32 height = CONTENT_FONT_HEIGHT + 4 + 4;
-  Rect rect  = c->place({0, height}, true, true);
+  Engine::Rect rect  = c->place({0, height}, true, true);
 
   b8 hot      = c->do_hot(&s, id, rect);
   b8 active   = do_active(id);
@@ -2137,9 +2137,9 @@ b8 directory_item(DuiId id, String text, b8 expandable, b8 selected = false)
   return open;
 }
 
-void init_dui(Gpu::Device *device, Gpu::Pipeline pipeline)
+void init_dui(Gpu::Device *device)
 {
-  init_draw_system(&s.dl, device, pipeline);
+  init_draw_system(&s.dl, device);
 
   s.empty_group      = create_group(nullptr, {})->id;
   s.fullscreen_group = s.empty_group;

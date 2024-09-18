@@ -55,7 +55,7 @@ struct Group {
   GroupId id     = -1;
   GroupId parent = -1;
 
-  Rect rect;
+  Engine::Rect rect;
   Vec2f span_before_snap = {0, 0};
 
   // cache to prevent walking up the tree constantly
@@ -72,12 +72,12 @@ struct Group {
 
   b8 is_leaf() { return windows.size > 0; }
 
-  Rect get_titlebar_full_rect();
-  Rect get_titlebar_margin_rect();
-  Rect get_titlebar_bottom_border_rect();
-  Rect get_titlebar_content_rect();
+  Engine::Rect get_titlebar_full_rect();
+  Engine::Rect get_titlebar_margin_rect();
+  Engine::Rect get_titlebar_bottom_border_rect();
+  Engine::Rect get_titlebar_content_rect();
 
-  Rect get_tabs_rect();
+  Engine::Rect get_tabs_rect();
 
   f32 get_combined_extra_desired_tab_space();
   f32 get_available_extra_tab_space();
@@ -86,11 +86,11 @@ struct Group {
   Vec2f get_tab_margin_span(i32 window_idx,
                             f32 combined_desired_extra_tab_space,
                             f32 extra_tab_space);
-  Rect get_tab_margin_rect(i32 window_idx);  // inefficient
+  Engine::Rect get_tab_margin_rect(i32 window_idx);  // inefficient
   i32 get_tab_at_pos(Vec2f pos);
 
-  Rect get_border_rect();
-  Rect get_window_rect();
+  Engine::Rect get_border_rect();
+  Engine::Rect get_window_rect();
   i32 get_window_idx(DuiId window_id);
 
   DuiId get_child_at_pos(Vec2f pos);

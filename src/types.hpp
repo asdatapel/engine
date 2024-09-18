@@ -17,3 +17,10 @@ typedef double f64;
 const u64 KB = 1024; 
 const u64 MB = 1024 * KB; 
 const u64 GB = 1024 * MB; 
+
+enum struct PixelFormat {
+  RGBA8U,
+  RG32F,
+  RGB32F,
+  RGBA32F,
+};

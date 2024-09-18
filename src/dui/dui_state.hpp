@@ -44,7 +44,7 @@ struct DuiState {
   Input *input = nullptr;
 
   Vec2f window_span;
-  Rect canvas;
+  Engine::Rect canvas;
   i64 frame = 0;
 
   GroupId top_root_group_at_mouse_pos = -1;

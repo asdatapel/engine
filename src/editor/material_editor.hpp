@@ -4,7 +4,7 @@
 
 #include "containers/array.hpp"
 #include "dui/nodes/retained_nodes.hpp"
-#include "gpu/vulkan/shader_models/pbr_lit.hpp"
+// #include "gpu/vulkan/shader_models/pbr_lit.hpp"
 #include "logging.hpp"
 #include "math/math.hpp"
 #include "memory.hpp"
@@ -249,10 +249,10 @@ String gen_glsl(Allocator *allocator)
     builder.size += s.size;
   };
   auto push_i32 = [&](i32 i) {
-    builder.size += sprintf((char *)builder.data + builder.size, "%d", i);
+    builder.size += snprintf((char *)builder.data + builder.size, builder_mem.size, "%d", i);
   };
   auto push_f32 = [&](f32 i) {
-    builder.size += sprintf((char *)builder.data + builder.size, "%f", i);
+    builder.size += snprintf((char *)builder.data + builder.size, builder_mem.size, "%f", i);
   };
   auto push_massaged = [&](String s, i32 in_components_n,
                            i32 out_components_n) {

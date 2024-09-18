@@ -1,6 +1,3 @@
 .vscode/
 build/
-third_party/assimp/
-third_party/freetype/
-third_party/glfw*
-third_party/stb
+third_party/metal-cpp

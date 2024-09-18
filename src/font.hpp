@@ -11,8 +11,8 @@
 const i32 NUM_CHARS_IN_FONT = 128;
 
 struct Character {
-  Rect shape;
-  Rect uv;
+  Engine::Rect shape;
+  Engine::Rect uv;
   f32 advance;
 };
 
@@ -125,8 +125,8 @@ i32 char_index_at_pos(Font *font, String text, Vec2f text_pos, Vec2f pos,
 struct TextPlacer {
   Vec2f next_pos;
 
-  Rect shape;
-  Rect uv;
+  Engine::Rect shape;
+  Engine::Rect uv;
   TextPlacer(Vec2f pos) { this->next_pos = pos; }
 };
 TextPlacer place_character(Font *font, char c, f32 height, TextPlacer cursor)
@@ -158,7 +158,7 @@ TextPlacer place_character(Font *font, char c, f32 height, TextPlacer cursor)
 //   f32 baseline = -max_ascent(font, text) * v_scale;
 //   for (i32 i = 0; i < text.size; i++) {
 //     Character c     = font.characters[text.data[i]];
-//     Rect shape_rect = {x + c.shape.x, y + baseline + (v_scale * c.shape.y),
+//     Engine::Rect shape_rect = {x + c.shape.x, y + baseline + (v_scale * c.shape.y),
 //                        h_scale * c.shape.width, v_scale * c.shape.height};
 //     x += c.advance * h_scale;
 //     if (just_alpha) {
@@ -176,7 +176,7 @@ TextPlacer place_character(Font *font, char c, f32 height, TextPlacer cursor)
 //   f32 baseline = font.baseline * v_scale;
 //   for (i32 i = 0; i < text.size; i++) {
 //     Character c     = font.characters[text.data[i]];
-//     Rect shape_rect = {x + c.shape.x, y + baseline + (v_scale * c.shape.y),
+//     Engine::Rect shape_rect = {x + c.shape.x, y + baseline + (v_scale * c.shape.y),
 //                        h_scale * c.shape.width, v_scale * c.shape.height};
 //     x += c.advance * h_scale;
 //     draw_textured_mapped_rect(target, shape_rect, c.uv, font.atlas);
@@ -190,7 +190,7 @@ TextPlacer place_character(Font *font, char c, f32 height, TextPlacer cursor)
 //   f32 baseline = font.baseline;
 //   for (i32 i = 0; i < text.size; i++) {
 //     Character c     = font.characters[text.data[i]];
-//     Rect shape_rect = {x + c.shape.x, y + baseline + c.shape.y,
+//     Engine::Rect shape_rect = {x + c.shape.x, y + baseline + c.shape.y,
 //     c.shape.width,
 //                        c.shape.height};
 //     x += c.advance;
@@ -199,7 +199,7 @@ TextPlacer place_character(Font *font, char c, f32 height, TextPlacer cursor)
 // }
 
 // void draw_centered_text(const Font &font, RenderTarget target, String text,
-//                         Rect sub_target, f32 border, f32 scale,
+//                         Engine::Rect sub_target, f32 border, f32 scale,
 //                         f32 aspect_ratio, b8 just_alpha = false)
 // {
 //   f32 border_x = border * sub_target.width;

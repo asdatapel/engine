@@ -18,7 +18,7 @@ struct Container {
   GroupId parent = -1;
   i32 z          = -1;
 
-  Rect rect;
+  Engine::Rect rect;
   Color color;
   b8 hot_mask  = true;
   f32 line_gap = DEFAULT_LINE_GAP;
@@ -26,7 +26,7 @@ struct Container {
   Vec2f scroll_offset_target = {0, 0};
   Vec2f scroll_offset        = {0, 0};
 
-  Rect content_rect;
+  Engine::Rect content_rect;
   Vec2f cursor = {0, 0};
   f32 cursor_size;
 
@@ -42,9 +42,9 @@ struct Container {
 
   u32 draw_scissor_idx = 0;
 
-  Rect get_content_rect()
+  Engine::Rect get_content_rect()
   {
-    Rect rect = inset(this->rect, WINDOW_MARGIN_SIZE);
+    Engine::Rect rect = inset(this->rect, WINDOW_MARGIN_SIZE);
 
     b8 shrunk_height = false;
     if (last_frame_minimum_content_span.x > rect.width) {
@@ -69,7 +69,7 @@ struct Container {
   void fit_rect_to_content();
   void expand_rect_to_content();
 
-  Rect place(Vec2f size, b8 commit = true, b8 fill = false)
+  Engine::Rect place(Vec2f size, b8 commit = true, b8 fill = false)
   {
     Vec2f scrolled_cursor = cursor + scroll_offset;
 
@@ -102,7 +102,7 @@ struct Container {
     };
   }
 
-  Rect get_remaining_rect()
+  Engine::Rect get_remaining_rect()
   {
     f32 next_line_y = cursor.y + scroll_offset.y + cursor_size;
     return {content_rect.x, content_rect.y + next_line_y, content_rect.width,
@@ -116,7 +116,7 @@ struct Container {
     cursor_size = 0;
   }
 
-  b8 do_hot(DuiState *s, DuiId id, Rect control_rect);
+  b8 do_hot(DuiState *s, DuiId id, Engine::Rect control_rect);
 
   // stretch + minimum size (causing scroll)
   // shrink + minimum size (causing scroll) + maximum size

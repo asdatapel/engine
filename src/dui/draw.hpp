@@ -3,7 +3,7 @@
 #include "containers/static_stack.hpp"
 #include "font.hpp"
 #include "font/vector_font.hpp"
-#include "gpu/vulkan/vulkan.hpp"
+#include "gpu/gpu.hpp"
 #include "math/math.hpp"
 #include "types.hpp"
 
@@ -27,11 +27,11 @@ enum struct PrimitiveIds : u32 {
 };
 
 struct RectPrimitive {
-  Rect rect;
+  Engine::Rect rect;
 };
 
 struct RoundedRectPrimitive {
-  Rect dimensions;
+  Engine::Rect dimensions;
   u32 clip_rect_idx;
   u32 color;
   f32 corner_radius;
@@ -39,28 +39,28 @@ struct RoundedRectPrimitive {
 };
 
 struct TextureRectPrimitive {
-  Rect dimensions;
+  Engine::Rect dimensions;
   Vec4f uv_bounds;
   u32 texture_idx;
   u32 clip_rect_idx;
-  Vec2f pad;
+  // Vec2f pad;
 };
 
 struct BitmapGlyphPrimitive {
-  Rect dimensions;
+  Engine::Rect dimensions;
   Vec4f uv_bounds;
   u32 clip_rect_idx;
   u32 color;
-  Vec2f pad;
+  // Vec2f pad;
 };
 
 struct ConicCurvePrimitive {
   Vec2f p0, p1, p2;
-  Vec2f pad;
+  // Vec2f pad;
 };
 
 struct VectorGlyphPrimitive {
-  Rect dimensions;
+  Engine::Rect dimensions;
   u32 curve_start_idx;
   u32 curve_count;
   u32 color;
@@ -72,7 +72,7 @@ struct LinePrimitive {
   Vec2f b;
   u32 color;
   u32 clip_rect_idx;
-  Vec2f pad;
+  // Vec2f pad;
 };
 
 struct Primitives {
@@ -83,6 +83,7 @@ struct Primitives {
   VectorGlyphPrimitive vector_glyphs[1024];
   ConicCurvePrimitive conic_curves[4096];
   LinePrimitive lines[4096];
+  Vec4f canvas_size;
 };
 
 struct DrawCall {
@@ -100,12 +101,10 @@ struct DrawSettings {
 struct DrawList {
   u64 frame = 0;
 
-  Gpu::ImageBuffer image;
-  VkImageView image_view;
-  VkSampler sampler;
-  VkDescriptorSet desc_set;
-
+  Gpu::Pipeline pipeline;
   Gpu::Buffer primitive_buffer;
+  Gpu::ShaderArgBuffer shader_args;
+  Gpu::Texture texture;
 
   Font font;
   VectorFont vfont;
@@ -122,7 +121,7 @@ struct DrawList {
   i32 vector_glyphs_count = 0;
   i32 lines_count         = 0;
 
-  StaticStack<Rect, 1024> scissors;
+  StaticStack<Engine::Rect, 1024> scissors;
   StaticStack<u32, 1024> scissor_idxs;
 
   StaticStack<DrawSettings, 32> settings;
@@ -148,15 +147,15 @@ u32 get_current_scissor_idx(DrawList *dl) {
   }
   return dl->scissor_idxs.top(); 
 }
-Rect get_current_scissor(DrawList *dl) {
+Engine::Rect get_current_scissor(DrawList *dl) {
   if (dl->settings.size > 0 && dl->settings.top().force_scissor) {
     return dl->primitives.clip_rects[dl->settings.top().scissor_idx].rect;
   }
   return dl->scissors.top(); 
 }
-u32 push_scissor(DrawList *dl, Rect rect)
+u32 push_scissor(DrawList *dl, Engine::Rect rect)
 {
-  auto to_bounds = [](Rect r) {
+  auto to_bounds = [](Engine::Rect r) {
     return Vec4f{r.x, r.y, r.x + r.width, r.y + r.height};
   };
   if (dl->scissors.size > 0) {
@@ -192,8 +191,7 @@ void push_base_scissor(DrawList *dl)
 u32 push_texture(Gpu::Device *device, DrawList *dl, VkImageView image_view,
                  VkSampler sampler)
 {
-  bind_sampler(device, dl->desc_set, image_view, sampler, 0,
-               dl->texture_count++);
+  // bind_sampler(device, dl->shader_args, 0, dl->texture_count++);
   return dl->texture_count - 1;
 }
 
@@ -221,7 +219,7 @@ enum CornerMask : u32 {
   BOTTOM       = BOTTOM_LEFT | BOTTOM_RIGHT,
   ALL          = TOP | BOTTOM,
 };
-u32 push_primitive_rounded_rect(DrawList *dl, Rect rect, Color color,
+u32 push_primitive_rounded_rect(DrawList *dl, Engine::Rect rect, Color color,
                                 f32 corner_radius, u32 corner_mask)
 {
   dl->primitives.rounded_rects[dl->rounded_rects_count++] = {
@@ -231,7 +229,7 @@ u32 push_primitive_rounded_rect(DrawList *dl, Rect rect, Color color,
   return dl->rounded_rects_count - 1;
 }
 
-RoundedRectPrimitive *push_rounded_rect(DrawList *dl, i32 z, Rect rect,
+RoundedRectPrimitive *push_rounded_rect(DrawList *dl, i32 z, Engine::Rect rect,
                                         f32 corner_radius, Color color,
                                         u32 corner_mask = CornerMask::ALL)
 {
@@ -259,12 +257,12 @@ RoundedRectPrimitive *push_rounded_rect(DrawList *dl, i32 z, Rect rect,
   return &dl->primitives.rounded_rects[primitive_idx];
 }
 
-RoundedRectPrimitive *push_rect(DrawList *dl, i32 z, Rect rect, Color color)
+RoundedRectPrimitive *push_rect(DrawList *dl, i32 z, Engine::Rect rect, Color color)
 {
   return push_rounded_rect(dl, z, rect, 0, color);
 }
 
-u32 push_primitive_bitmap_glyph(DrawList *dl, Rect rect, Vec4f uv_bounds,
+u32 push_primitive_bitmap_glyph(DrawList *dl, Engine::Rect rect, Vec4f uv_bounds,
                                 Color color)
 {
   dl->primitives.bitmap_glyphs[dl->bitmap_glyphs_count++] = {
@@ -273,7 +271,7 @@ u32 push_primitive_bitmap_glyph(DrawList *dl, Rect rect, Vec4f uv_bounds,
   return dl->bitmap_glyphs_count - 1;
 }
 
-void push_bitmap_glyph(DrawList *dl, i32 z, Rect rect, Vec4f uv_bounds,
+void push_bitmap_glyph(DrawList *dl, i32 z, Engine::Rect rect, Vec4f uv_bounds,
                        Color color)
 {
   auto push_glyph_vert = [](DrawList *dl, u32 primitive_index, u8 corner) {
@@ -304,7 +302,7 @@ void push_text(DrawList *dl, i32 z, String text, Vec2f pos, Color color,
   f32 resize_ratio = height / dl->font.font_size_px;
   for (int i = 0; i < text.size; i++) {
     Character c     = dl->font.characters[text.data[i]];
-    Rect shape_rect = {
+    Engine::Rect shape_rect = {
         pos.x + c.shape.x * resize_ratio, pos.y + (c.shape.y) * resize_ratio,
         c.shape.width * resize_ratio, c.shape.height * resize_ratio};
     pos.x += c.advance * resize_ratio;
@@ -332,7 +330,7 @@ void push_text_centered(DrawList *dl, i32 z, String text, Vec2f pos,
   push_text(dl, z, text, centered_pos, color, height);
 }
 
-u32 push_primitive_vector_glyph(DrawList *dl, Rect rect, Glyph glyph,
+u32 push_primitive_vector_glyph(DrawList *dl, Engine::Rect rect, Glyph glyph,
                                 Color color)
 {
   dl->primitives.vector_glyphs[dl->vector_glyphs_count++] = {
@@ -342,7 +340,7 @@ u32 push_primitive_vector_glyph(DrawList *dl, Rect rect, Glyph glyph,
   return dl->vector_glyphs_count - 1;
 }
 
-void push_vector_glyph(DrawList *dl, i32 z, Rect rect, Glyph glyph, Color color)
+void push_vector_glyph(DrawList *dl, i32 z, Engine::Rect rect, Glyph glyph, Color color)
 {
   auto push_glyph_vert = [](DrawList *dl, u32 primitive_index, u8 corner) {
     dl->verts[dl->vert_count++] = {(u32)PrimitiveIds::VECTOR_GLYPH |
@@ -373,7 +371,7 @@ void push_vector_text(DrawList *dl, i32 z, String text, Vec2f pos, Color color,
 
     f32 width       = size * g.size.x;
     f32 height      = size * g.size.y;
-    Rect shape_rect = {pos.x + (size * g.bearing.x),
+    Engine::Rect shape_rect = {pos.x + (size * g.bearing.x),
                        pos.y + (size * dl->vfont.ascent) - (size * g.bearing.y),
                        width, height};
     pos.x += size * g.advance;
@@ -391,7 +389,7 @@ void push_vector_text(DrawList *dl, VectorFont *font, i32 z, String text,
 
     f32 width       = size * g.size.x;
     f32 height      = size * g.size.y;
-    Rect shape_rect = {pos.x + (size * g.bearing.x),
+    Engine::Rect shape_rect = {pos.x + (size * g.bearing.x),
                        pos.y + (size * font->ascent) - (size * g.bearing.y),
                        width, height};
     pos.x += size * g.advance;
@@ -422,7 +420,7 @@ void push_vector_text_justified(DrawList *dl, i32 z, String text, Vec2f pos,
 
     f32 width       = size * g.size.x;
     f32 height      = size * g.size.y;
-    Rect shape_rect = {pos.x + (size * g.bearing.x),
+    Engine::Rect shape_rect = {pos.x + (size * g.bearing.x),
                        pos.y + (size * dl->vfont.ascent) - (size * g.bearing.y),
                        width, height};
     pos.x += size * g.advance;
@@ -445,7 +443,7 @@ void push_vector_text_centered(DrawList *dl, i32 z, String text, Vec2f pos,
 
     f32 width       = size * g.size.x;
     f32 height      = size * g.size.y;
-    Rect shape_rect = {pos.x + (size * g.bearing.x),
+    Engine::Rect shape_rect = {pos.x + (size * g.bearing.x),
                        pos.y + (size * dl->vfont.ascent) - (size * g.bearing.y),
                        width, height};
     pos.x += size * g.advance;
@@ -454,10 +452,10 @@ void push_vector_text_centered(DrawList *dl, i32 z, String text, Vec2f pos,
   }
 };
 
-void push_texture_rect(DrawList *dl, i32 z, Rect rect, Vec4f uv_bounds,
+void push_texture_rect(DrawList *dl, i32 z, Engine::Rect rect, Vec4f uv_bounds,
                        u32 texture_id)
 {
-  auto push_primitive_texture_rect = [](DrawList *dl, Rect rect,
+  auto push_primitive_texture_rect = [](DrawList *dl, Engine::Rect rect,
                                         Vec4f uv_bounds, u32 texture_id) {
     dl->primitives.texture_rects[dl->texture_rects_count++] = {
         rect, uv_bounds, texture_id, get_current_scissor_idx(dl)};
@@ -504,7 +502,7 @@ void push_line(DrawList *dl, i32 z, Vec2f a, Vec2f b, Color color)
 
   Vec2f mins        = min(a, b);
   Vec2f maxs        = max(a, b);
-  Rect bounding_box = {mins.x, mins.y, maxs.x - mins.x, maxs.y - mins.y};
+  Engine::Rect bounding_box = {mins.x, mins.y, maxs.x - mins.x, maxs.y - mins.y};
   if (!overlaps(bounding_box, get_current_scissor(dl))) {
     return;
   }
@@ -545,11 +543,8 @@ void push_cubic_spline(DrawList *dl, i32 z, Vec2f p[4], Color color,
   }
 }
 
-void init_draw_system(DrawList *dl, Gpu::Device *device, Gpu::Pipeline pipeline)
+void init_draw_system(DrawList *dl, Gpu::Device *device)
 {
-  // TODO: create pipeline here
-  dl->desc_set = Gpu::create_descriptor_set(device, pipeline);
-
   dl->vfont = create_font("resources/fonts/OpenSans-Regular.ttf");
   for (i32 i = 0; i < dl->vfont.curves.size; i++) {
     dl->primitives.conic_curves[dl->conic_curves_count++] = {
@@ -562,13 +557,30 @@ void init_draw_system(DrawList *dl, Gpu::Device *device, Gpu::Pipeline pipeline)
     dl->primitives.conic_curves[dl->conic_curves_count++] = {
         dl->icon_font.curves[i].p0, dl->icon_font.curves[i].p1,
         dl->icon_font.curves[i].p2};
-  }
+  }  
+  
+  Gpu::ShaderArgumentDefinition shader_arg_def_primitives;
+  shader_arg_def_primitives.type = Gpu::ShaderArgumentDefinition::Type::DATA;
+  shader_arg_def_primitives.access = (Gpu::Access) (Gpu::Access::WRITE | Gpu::Access::READ);
 
-  dl->primitive_buffer = create_storage_buffer(device, MB);
-  bind_storage_buffer(device, dl->desc_set, dl->primitive_buffer, 1);
+  // Gpu::ShaderArgumentDefinition shader_arg_def_samplers;
+  // shader_arg_def_samplers.type = Gpu::ShaderArgumentDefinition::Type::SAMPLER;
+  // shader_arg_def_samplers.access = Gpu::Access::READ;
+  // shader_arg_def_samplers.count = 128;
+
+  Gpu::ShadersDefinition shaders_definition;
+  shaders_definition.vert_shader = "vertex_shader";
+  shaders_definition.frag_shader = "fragment_shader";
+  shaders_definition.arg_defs = {shader_arg_def_primitives};
+
+  dl->pipeline = Gpu::create_pipeline(device, shaders_definition);
+
+  dl->shader_args = Gpu::create_shader_arg_buffer(device, &dl->pipeline);
+  dl->primitive_buffer = Gpu::create_buffer(device, 128*MB, "primitive_buffer");
+  Gpu::bind_shader_buffer_data(dl->shader_args, dl->primitive_buffer, 0);
 
   dl->verts        = (u32 *)malloc(sizeof(u32) * 1024 * 1024);
-  dl->index_buffer = create_index_buffer(device, MB);
+  dl->index_buffer = create_buffer(device, MB, "index_buffer");
 }
 
 void draw_system_start_frame(DrawList *dl)
@@ -590,20 +602,22 @@ void draw_system_start_frame(DrawList *dl)
   push_scissor(dl, {0, 0, 100000, 100000});
 }
 
-void draw_system_end_frame(DrawList *dl, Gpu::Device *device,
-                           Gpu::Pipeline pipeline, Vec2f canvas_size, u64 frame)
+void draw_system_end_frame(DrawList *dl, Gpu::Device *device, Vec2f canvas_size, u64 frame)
 {
+  dl->primitives.canvas_size = Vec4f{canvas_size.x, canvas_size.y, 0 , 0};
+
   if (dl->frame != frame) {
     dl->frame = frame;
-    upload_buffer_staged(device, dl->primitive_buffer, &dl->primitives,
-                         sizeof(dl->primitives));
+    Gpu::upload_buffer(dl->primitive_buffer, &dl->primitives, sizeof(dl->primitives), 0);
+    Gpu::upload_buffer(dl->index_buffer, dl->verts, dl->vert_count * sizeof(u32), 0);
   }
+  Gpu::bind_shader_buffer_data(dl->shader_args, dl->primitive_buffer, 0);
+  
+  device->render_command_encoder->setVertexBuffer(dl->shader_args.buffer.mtl_buffer, 0, 0);
+  device->render_command_encoder->setFragmentBuffer(dl->shader_args.buffer.mtl_buffer, 0, 0);
+  device->render_command_encoder->useResource(dl->primitive_buffer.mtl_buffer, MTL::ResourceUsageRead, MTL::RenderStageFragment | MTL::RenderStageVertex);
 
-  Gpu::bind_descriptor_set(device, pipeline, dl->desc_set);
-  Gpu::upload_buffer_staged(device, dl->index_buffer, dl->verts,
-                            dl->vert_count * sizeof(u32));
-  Gpu::push_constant(device, pipeline, &canvas_size, sizeof(Vec2f));
-
+  Gpu::bind_pipeline(device, dl->pipeline);
   for (i32 z = dl->max_z; z >= 0; z--) {
     for (i32 i = 0; i < dl->draw_calls.size; i++) {
       DrawCall call = dl->draw_calls[i];

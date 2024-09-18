@@ -6,11 +6,13 @@
 #include "memory.hpp"
 #include "math/math.hpp"
 #include "types.hpp"
+#include "file.hpp"
 
 struct Image {
   u32 width, height;
   u64 size;
   Mem mem;
+  PixelFormat format;
 
   Image() {}
   Image(u32 width, u32 height, u32 pixel_size, Allocator *allocator)

@@ -1,14 +1,14 @@
 #pragma once
 
-#define NOMINMAX
-#include <windows.h>
-#undef near
-#undef far
+// #define NOMINMAX
+// #include <windows.h>
+// #undef near
+// #undef far
 
 #include <unordered_map>
 
 #include "dui/dui_state.hpp"
-#include "gpu/vulkan/framebuffer.hpp"
+#include "gpu/gpu.hpp"
 #include "input.hpp"
 #include "logging.hpp"
 #include "math/math.hpp"
@@ -21,7 +21,7 @@ void init_dui(Gpu::Device *device, Gpu::Pipeline pipeline);
 void start_frame(Input *input, Platform::GlfwWindow *window);
 void end_frame(Platform::GlfwWindow *window, Gpu::Device *device,
                Gpu::Pipeline pipeline);
-DuiId start_window(String name, Rect initial_rect);
+DuiId start_window(String name, Engine::Rect initial_rect);
 void end_window();
 b8 button(String text, Vec2f size, Color color, b8 fill = false);
 void texture(Vec2f size, u32 texture_id);

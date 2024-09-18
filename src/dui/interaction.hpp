@@ -5,7 +5,7 @@
 namespace Dui
 {
 // when control is not tied to any group or container
-b8 do_hot(DuiId id, Rect rect)
+b8 do_hot(DuiId id, Engine::Rect rect)
 {
   b8 is_hot = in_rect(s.input->mouse_pos, rect);
   if (is_hot)
@@ -17,7 +17,7 @@ b8 do_hot(DuiId id, Rect rect)
 }
 
 // for group controls
-b8 do_hot(DuiId id, Rect rect, Group *root_group)
+b8 do_hot(DuiId id, Engine::Rect rect, Group *root_group)
 {
   b8 not_blocked_by_container = s.top_container_at_mouse_pos == -1;
   b8 is_in_top_group          = !s.top_root_group_at_mouse_pos.valid() ||
@@ -33,24 +33,24 @@ b8 do_hot(DuiId id, Rect rect, Group *root_group)
   return is_hot;
 }
 
-// // for widgets inside windows
-// b8 do_hot(DuiId id, Rect control_rect, Rect container_rect)
-// {
-//   b8 is_top_container     = !s.cw || s.cw->id == s.top_container_at_mouse_pos;
-//   b8 is_in_container_rect = in_rect(s.input->mouse_pos, container_rect);
+// for widgets inside windows
+b8 do_hot(DuiId id, Engine::Rect control_rect, Engine::Rect container_rect)
+{
+  b8 is_top_container     = !s.cw || s.cw->id == s.top_container_at_mouse_pos;
+  b8 is_in_container_rect = in_rect(s.input->mouse_pos, container_rect);
 
-//   b8 is_hot = is_top_container && is_in_container_rect &&
-//               in_rect(s.input->mouse_pos, control_rect);
-//   if (is_hot)
-//     s.set_hot(id);
-//   else
-//     s.clear_hot(id);
+  b8 is_hot = is_top_container && is_in_container_rect &&
+              in_rect(s.input->mouse_pos, control_rect);
+  if (is_hot)
+    s.set_hot(id);
+  else
+    s.clear_hot(id);
 
-//   return is_hot;
-// }
+  return is_hot;
+}
 
 // for widgets inside popups
-b8 do_hot(DuiId id, Rect control_rect, Container *popup)
+b8 do_hot(DuiId id, Engine::Rect control_rect, Container *popup)
 {
   b8 is_top_container     = popup->id == s.top_container_at_mouse_pos;
   b8 is_in_container_rect = in_rect(s.input->mouse_pos, popup->rect);

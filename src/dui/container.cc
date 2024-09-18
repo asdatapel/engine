@@ -41,12 +41,12 @@ void Container::start_frame(DuiState *s, b8 is_popup)
       f32 scrollbar_y = -scroll_offset_target.y /
                         last_frame_minimum_content_span.y * content_rect.height;
 
-      Rect scrollbar_area_rect =
-          Rect{content_rect.x + content_rect.width + SCROLLBAR_BORDER,
+      Engine::Rect scrollbar_area_rect =
+          Engine::Rect{content_rect.x + content_rect.width + SCROLLBAR_BORDER,
                content_rect.y, SCROLLBAR_SIZE, content_rect.height};
 
-      Rect scrollbar_rect =
-          Rect{content_rect.x + content_rect.width + SCROLLBAR_BORDER,
+      Engine::Rect scrollbar_rect =
+          Engine::Rect{content_rect.x + content_rect.width + SCROLLBAR_BORDER,
                content_rect.y + scrollbar_y, SCROLLBAR_SIZE, scrollbar_height};
 
       DuiId vertical_scrollbar_id = extend_hash(id, "vertical_scrollbar");
@@ -68,7 +68,7 @@ void Container::start_frame(DuiState *s, b8 is_popup)
         scrollbar_y += (s->input->mouse_pos.y - scrollbar_rect.y) -
                        s->dragging_start_local_position.y;
         scrollbar_y    = clamp(scrollbar_y, 0.f, scrollbar_range);
-        scrollbar_rect = Rect{
+        scrollbar_rect = Engine::Rect{
             content_rect.x + content_rect.width + SCROLLBAR_BORDER,
             content_rect.y + scrollbar_y, SCROLLBAR_SIZE, scrollbar_height};
 
@@ -98,12 +98,12 @@ void Container::start_frame(DuiState *s, b8 is_popup)
       f32 scrollbar_x = -scroll_offset_target.x /
                         last_frame_minimum_content_span.x * content_rect.width;
 
-      Rect scrollbar_area_rect =
-          Rect{content_rect.x,
+      Engine::Rect scrollbar_area_rect =
+          Engine::Rect{content_rect.x,
                content_rect.y + content_rect.height + SCROLLBAR_BORDER,
                content_rect.width, SCROLLBAR_SIZE};
-      Rect scrollbar_rect =
-          Rect{content_rect.x + scrollbar_x,
+      Engine::Rect scrollbar_rect =
+          Engine::Rect{content_rect.x + scrollbar_x,
                content_rect.y + content_rect.height + SCROLLBAR_BORDER,
                scrollbar_width, SCROLLBAR_SIZE};
 
@@ -127,7 +127,7 @@ void Container::start_frame(DuiState *s, b8 is_popup)
                        s->dragging_start_local_position.x;
         scrollbar_x = clamp(scrollbar_x, 0.f, scrollbar_range);
         scrollbar_rect =
-            Rect{content_rect.x + scrollbar_x,
+            Engine::Rect{content_rect.x + scrollbar_x,
                  content_rect.y + content_rect.height + SCROLLBAR_BORDER,
                  scrollbar_width, SCROLLBAR_SIZE};
 
@@ -194,7 +194,7 @@ Container *get_current_container(DuiState *s)
   return cc;
 }
 
-b8 Container::do_hot(DuiState *s, DuiId id, Rect control_rect)
+b8 Container::do_hot(DuiState *s, DuiId id, Engine::Rect control_rect)
 {
   b8 is_top_window = !s->cw || s->cw->id == s->top_container_at_mouse_pos;
   b8 is_in_container_rect = in_rect(s->input->mouse_pos, content_rect);
